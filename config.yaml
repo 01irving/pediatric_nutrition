@@ -1,0 +1,23 @@
+# ============================================
+# Nutrición Pediátrica - Configuración
+# ============================================
+
+app:
+  name: "Nutrición Pediátrica"
+  version: "1.0.0"
+  language: "es"
+
+database:
+  name: "nutricion_pediátrica.db"
+  path: "data/"
+
+gui:
+  theme: "clam"
+  window_width: 1200
+  window_height: 800
+  font_family: "Segoe UI"
+  font_size: 10
+
+reports:
+  output_dir: "data/reports/"
+  logo_path: "assets/"
