@@ -66,78 +66,12 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS pacientes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT NOT NULL,
-                apellido TEXT NOT NULL,
                 fecha_nacimiento DATE NOT NULL,
                 sexo TEXT NOT NULL CHECK(sexo IN ('M', 'F')),
                 peso_kg REAL,
                 talla_cm REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Tabla de registros de crecimiento
-            CREATE TABLE IF NOT EXISTS registros_crecimiento (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER NOT NULL,
-                fecha DATE NOT NULL,
-                peso_kg REAL NOT NULL,
-                talla_cm REAL NOT NULL,
-                imc REAL,
-                perimetro_cefalico_cm REAL,
-                perimetro_brazo_cm REAL,
-                pliegue_cutaneo_mm REAL,
-                observaciones TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
-            );
-
-            -- Tabla de registros nutricionales (dietas)
-            CREATE TABLE IF NOT EXISTS registros_nutricionales (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER NOT NULL,
-                fecha DATE NOT NULL,
-                calorias_kcal REAL,
-                proteinas_g REAL,
-                grasas_g REAL,
-                carbohidratos_g REAL,
-                fibra_g REAL,
-                hierro_mg REAL,
-                calcio_mg REAL,
-                vitamina_a_ui REAL,
-                vitamina_c_mg REAL,
-                zinc_mg REAL,
-                observaciones TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
-            );
-
-            -- Tabla de alertas
-            CREATE TABLE IF NOT EXISTS alertas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER NOT NULL,
-                tipo_alerta TEXT NOT NULL,
-                mensaje TEXT NOT NULL,
-                severidad TEXT CHECK(severidad IN ('baja', 'media', 'alta', 'critica')),
-                activa INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
-            );
-
-            -- Tabla de alimentos
-            CREATE TABLE IF NOT EXISTS alimentos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                categoria TEXT,
-                calorias_kcal REAL,
-                proteinas_g REAL,
-                grasas_g REAL,
-                carbohidratos_g REAL,
-                fibra_g REAL,
-                hierro_mg REAL,
-                calcio_mg REAL,
-                vitamina_a_ui REAL,
-                vitamina_c_mg REAL,
-                zinc_mg REAL
             );
 
             -- Tabla de historia alimentaria
@@ -203,21 +137,44 @@ class DatabaseManager:
                 FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
             );
 
-            -- Tabla de usuario
-            CREATE TABLE IF NOT EXISTS usuarios (
+            -- Tabla de historia médica
+            CREATE TABLE IF NOT EXISTS historia_medica (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                nombre_completo TEXT,
-                rol TEXT DEFAULT 'nutricionista',
-                activo INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                paciente_id INTEGER NOT NULL,
+                fecha_evaluacion DATE NOT NULL,
+                evaluador TEXT,
+                motivo_consulta TEXT,
+                diagnosticos_actuales TEXT,
+                antecedentes_personales TEXT,
+                antecedentes_familiares TEXT,
+                cirugias_hospitalizaciones TEXT,
+                medicamentos_suplementos TEXT,
+                alergias_intolerancias TEXT,
+                observaciones_medicas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
+            );
+
+            -- Tabla de resultados de laboratorio
+            CREATE TABLE IF NOT EXISTS laboratorios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER NOT NULL,
+                fecha_toma DATE NOT NULL,
+                tipo_prueba TEXT NOT NULL,
+                valor TEXT NOT NULL,
+                unidad TEXT,
+                edad_meses_al_momento REAL,
+                resultado_clasificacion TEXT,
+                rango_referencia TEXT,
+                observaciones TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
             );
 
             -- Índices
-            CREATE INDEX IF NOT EXISTS idx_pacientes_nombre ON pacientes(apellido, nombre);
-            CREATE INDEX IF NOT EXISTS idx_crecimiento_paciente ON registros_crecimiento(paciente_id, fecha);
-            CREATE INDEX IF NOT EXISTS idx_nutricional_paciente ON registros_nutricionales(paciente_id, fecha);
-            CREATE INDEX IF NOT EXISTS idx_alertas_paciente ON alertas(paciente_id, activa);
+            CREATE INDEX IF NOT EXISTS idx_pacientes_nombre ON pacientes(nombre);
+            CREATE INDEX IF NOT EXISTS idx_historia_paciente ON historia_alimentaria(paciente_id, fecha_evaluacion);
+            CREATE INDEX IF NOT EXISTS idx_historia_medica_paciente ON historia_medica(paciente_id, fecha_evaluacion);
+            CREATE INDEX IF NOT EXISTS idx_laboratorios_paciente ON laboratorios(paciente_id, fecha_toma);
         """)
         self.commit()

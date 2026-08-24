@@ -4,7 +4,7 @@ Incluye: Pacientes, Evaluación, Seguimiento, Requerimientos, Historia Alimentar
 """
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 import sys
 import os
@@ -14,12 +14,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.database.db_manager import DatabaseManager
 from src.modules.patient_manager import PatientManager
 from src.modules.historia_alimentaria_manager import HistoriaAlimentariaManager
+from src.modules.historia_medica_manager import HistoriaMedicaManager
+from src.modules.laboratorio_manager import LaboratorioManager
+from src.modules.laboratorio_data import (
+    listar_pruebas, obtener_prueba, clasificar_resultado,
+    unidades_disponibles, convertir_a_base
+)
 from src.modules.nutrition_calcs import (
     calcular_edad_meses, calcular_imc,
     calcular_z_score_peso_edad, calcular_z_score_talla_edad,
     calcular_z_score_peso_talla, calcular_z_score_imc_edad,
     clasificar_estado_nutricional, clasificar_talla_edad,
     calcular_requerimientos_caloricos, generar_reporte_evaluacion
+)
+from src.modules.antropometria import (
+    generar_reporte_antropometrico, calcular_edad_texto,
+    clasificar_muac, clasificar_perimetro_cefalico,
+    peso_porcentaje_esperado, TASAS_PESO_SEMANAL
 )
 
 COLOR_BG = "#f0f4f8"
@@ -29,6 +40,19 @@ COLOR_SECTION = "#d6eaf8"
 COLOR_WHITE = "#ffffff"
 COLOR_LABEL = "#2c3e50"
 COLOR_ENTRY_BG = "#fdfefe"
+
+
+def _parsear_fecha(texto: str) -> date:
+    """Convierte una fecha de la interfaz (DD-MM-AAAA) a date."""
+    return datetime.strptime(texto.strip(), "%d-%m-%Y").date()
+
+
+def _mostrar_fecha(fecha: str) -> str:
+    """Convierte una fecha ISO almacenada a DD-MM-AAAA para la interfaz."""
+    try:
+        return date.fromisoformat(fecha).strftime("%d-%m-%Y")
+    except (TypeError, ValueError):
+        return fecha or ""
 
 
 class ScrollFrame(tk.Frame):
@@ -75,6 +99,8 @@ class MainWindow:
         self.db.create_tables()
         self.patient_mgr = PatientManager(self.db)
         self.historia_mgr = HistoriaAlimentariaManager(self.db)
+        self.historia_med_mgr = HistoriaMedicaManager(self.db)
+        self.laboratorio_mgr = LaboratorioManager(self.db)
 
         self._configurar_estilo()
         self._crear_barra_superior()
@@ -134,10 +160,10 @@ class MainWindow:
 
     def _crear_pestanas(self):
         self._crear_pestana_pacientes()
-        self._crear_pestana_evaluacion()
-        self._crear_pestana_seguimiento()
-        self._crear_pestana_requerimientos()
+        self._crear_pestana_historia_medica()
         self._crear_pestana_historia_alimentaria()
+        self._crear_pestana_antropometria()
+        self._crear_pestana_laboratorios()
 
     # ==================================================================
     # PESTAÑA 1: PACIENTES
@@ -153,16 +179,13 @@ class MainWindow:
 
         row1 = ttk.Frame(form_frame)
         row1.pack(fill=tk.X, pady=2)
-        ttk.Label(row1, text="Nombre:").pack(side=tk.LEFT, padx=5)
-        self.entry_nombre = ttk.Entry(row1, width=25)
+        ttk.Label(row1, text="Nombre completo:").pack(side=tk.LEFT, padx=5)
+        self.entry_nombre = ttk.Entry(row1, width=55)
         self.entry_nombre.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row1, text="Apellido:").pack(side=tk.LEFT, padx=5)
-        self.entry_apellido = ttk.Entry(row1, width=25)
-        self.entry_apellido.pack(side=tk.LEFT, padx=5)
 
         row2 = ttk.Frame(form_frame)
         row2.pack(fill=tk.X, pady=2)
-        ttk.Label(row2, text="Fecha nac. (AAAA-MM-DD):").pack(side=tk.LEFT, padx=5)
+        ttk.Label(row2, text="Fecha nac. (DD-MM-AAAA):").pack(side=tk.LEFT, padx=5)
         self.entry_fecha_nac = ttk.Entry(row2, width=15)
         self.entry_fecha_nac.pack(side=tk.LEFT, padx=5)
         ttk.Label(row2, text="Sexo:").pack(side=tk.LEFT, padx=5)
@@ -196,12 +219,13 @@ class MainWindow:
         ttk.Button(search_frame, text="Buscar", command=self._buscar_pacientes).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Todos", command=self._cargar_pacientes).pack(side=tk.LEFT, padx=5)
 
-        cols = ("ID", "Nombre", "Apellido", "Nacimiento", "Sexo", "Peso", "Talla")
+        cols = ("ID", "Nombre completo", "Nacimiento", "Sexo", "Peso", "Talla")
         self.tree_pacientes = ttk.Treeview(frame, columns=cols, show='headings', height=8)
         for c in cols:
             self.tree_pacientes.heading(c, text=c)
-            self.tree_pacientes.column(c, width=120, anchor=tk.CENTER)
+            self.tree_pacientes.column(c, width=140, anchor=tk.CENTER)
         self.tree_pacientes.column("ID", width=50)
+        self.tree_pacientes.column("Nombre completo", width=250, anchor=tk.W)
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.tree_pacientes.yview)
         self.tree_pacientes.configure(yscrollcommand=scrollbar.set)
         self.tree_pacientes.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
@@ -225,9 +249,9 @@ class MainWindow:
         ttk.Label(row, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
         self.entry_eval_paciente_id = ttk.Entry(row, width=10)
         self.entry_eval_paciente_id.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row, text="Fecha (AAAA-MM-DD):").pack(side=tk.LEFT, padx=5)
+        ttk.Label(row, text="Fecha (DD-MM-AAAA):").pack(side=tk.LEFT, padx=5)
         self.entry_eval_fecha = ttk.Entry(row, width=15)
-        self.entry_eval_fecha.insert(0, date.today().isoformat())
+        self.entry_eval_fecha.insert(0, date.today().strftime("%d-%m-%Y"))
         self.entry_eval_fecha.pack(side=tk.LEFT, padx=5)
         ttk.Button(row, text="Evaluar", style='Primary.TButton', command=self._realizar_evaluacion).pack(side=tk.LEFT, padx=10)
 
@@ -304,6 +328,14 @@ class MainWindow:
         hdr = ttk.LabelFrame(parent, text=" Datos del Paciente ", padding=10)
         hdr.pack(fill=tk.X, padx=10, pady=5)
 
+        r0 = ttk.Frame(hdr)
+        r0.pack(fill=tk.X, pady=2)
+        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
+        self.ha_paciente_id = ttk.Entry(r0, width=10)
+        self.ha_paciente_id.pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar Paciente", command=self._cargar_paciente_en_historia).pack(side=tk.LEFT, padx=5)
+        self.ha_paciente_id.bind("<Return>", lambda e: self._cargar_paciente_en_historia())
+
         r1 = ttk.Frame(hdr)
         r1.pack(fill=tk.X, pady=2)
         ttk.Label(r1, text="Nombre del niño/a:").pack(side=tk.LEFT, padx=5)
@@ -327,7 +359,7 @@ class MainWindow:
         r3.pack(fill=tk.X, pady=2)
         ttk.Label(r3, text="Fecha de evaluación:").pack(side=tk.LEFT, padx=5)
         self.ha_fecha_eval = ttk.Entry(r3, width=15)
-        self.ha_fecha_eval.insert(0, date.today().isoformat())
+        self.ha_fecha_eval.insert(0, date.today().strftime("%d-%m-%Y"))
         self.ha_fecha_eval.pack(side=tk.LEFT, padx=5)
         ttk.Label(r3, text="Nombre del evaluador:").pack(side=tk.LEFT, padx=5)
         self.ha_evaluador = ttk.Entry(r3, width=30)
@@ -504,41 +536,752 @@ class MainWindow:
         ttk.Button(btn_frame, text="Ver Último Registro", command=self._ver_ultima_historia).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Limpiar Formulario", command=self._limpiar_historia).pack(side=tk.LEFT, padx=5)
 
-        ttk.Label(parent, text="ID Paciente:", style='Subtitle.TLabel').pack(side=tk.LEFT, padx=(10, 2))
-        self.ha_paciente_id = ttk.Entry(parent, width=10)
-        self.ha_paciente_id.pack(side=tk.LEFT, padx=5)
+    # ==================================================================
+    # PESTAÑA: HISTORIA MÉDICA
+    # ==================================================================
+    def _crear_pestana_historia_medica(self):
+        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
+        self.notebook.add(frame, text="  Historia Médica  ")
+        parent = frame.inner
+
+        ttk.Label(parent, text="Historia Médica del Paciente", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Selección de Paciente ---
+        sel_frame = ttk.LabelFrame(parent, text=" Paciente ", padding=10)
+        sel_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        r0 = ttk.Frame(sel_frame)
+        r0.pack(fill=tk.X, pady=2)
+        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
+        self.hm_paciente_id = ttk.Entry(r0, width=10)
+        self.hm_paciente_id.pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar Paciente", command=self._hm_cargar_paciente).pack(side=tk.LEFT, padx=5)
+        self.hm_paciente_id.bind("<Return>", lambda e: self.hm_cargar_paciente())
+
+        r0b = ttk.Frame(sel_frame)
+        r0b.pack(fill=tk.X, pady=2)
+        ttk.Label(r0b, text="Nombre:").pack(side=tk.LEFT, padx=5)
+        self.hm_nombre = ttk.Entry(r0b, width=30, state='readonly')
+        self.hm_nombre.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Fecha de evaluación (DD-MM-AAAA):").pack(side=tk.LEFT, padx=5)
+        self.hm_fecha_eval = ttk.Entry(r0b, width=15)
+        self.hm_fecha_eval.insert(0, date.today().strftime("%d-%m-%Y"))
+        self.hm_fecha_eval.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Evaluador:").pack(side=tk.LEFT, padx=5)
+        self.hm_evaluador = ttk.Entry(r0b, width=25)
+        self.hm_evaluador.pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Formulario de Historia Médica ---
+        form_frame = ttk.LabelFrame(parent, text=" Antecedentes Médicos ", padding=10)
+        form_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        self.hm_campos = {}
+        campos = [
+            ("motivo_consulta", "Motivo de consulta:"),
+            ("diagnosticos_actuales", "Diagnósticos actuales:"),
+            ("antecedentes_personales", "Antecedentes personales patológicos:"),
+            ("antecedentes_familiares", "Antecedentes familiares relevantes:"),
+            ("cirugias_hospitalizaciones", "Cirugías, traumatismos u hospitalizaciones:"),
+            ("medicamentos_suplementos", "Medicamentos y suplementos actuales:"),
+            ("alergias_intolerancias", "Alergias e intolerancias alimentarias:"),
+            ("observaciones_medicas", "Observaciones médicas adicionales:"),
+        ]
+
+        for i, (nombre, etiqueta) in enumerate(campos):
+            ttk.Label(form_frame, text=etiqueta, font=('Segoe UI', 10, 'bold')).grid(
+                row=i * 2, column=0, sticky="w", pady=(8, 2), padx=5
+            )
+            campo = tk.Text(form_frame, height=3, width=75, wrap="word", font=('Segoe UI', 10))
+            campo.grid(row=i * 2 + 1, column=0, sticky="ew", pady=(0, 5), padx=5)
+            self.hm_campos[nombre] = campo
+
+        form_frame.columnconfigure(0, weight=1)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Botones ---
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn_frame, text="Guardar Historia Médica", style='Primary.TButton',
+                   command=self._hm_guardar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Ver Último Registro", command=self._hm_ver_ultimo).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Limpiar Formulario", command=self._hm_limpiar).pack(side=tk.LEFT, padx=5)
+
+    def _hm_cargar_paciente(self):
+        """Carga datos del paciente en la pestaña historia médica."""
+        try:
+            pid = int(self.hm_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        self.hm_nombre.config(state='normal')
+        self.hm_nombre.delete(0, tk.END)
+        self.hm_nombre.insert(0, paciente['nombre'])
+        self.hm_nombre.config(state='readonly')
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Historia Médica")
+
+    def _hm_guardar(self):
+        """Guarda la historia médica en la base de datos."""
+        try:
+            pid = int(self.hm_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        try:
+            fecha_eval = _parsear_fecha(self.hm_fecha_eval.get())
+        except ValueError:
+            messagebox.showerror("Error", "Fecha de evaluación inválida (DD-MM-AAAA).")
+            return
+
+        evaluador = self.hm_evaluador.get().strip()
+        datos = {}
+        for nombre, campo in self.hm_campos.items():
+            datos[nombre] = campo.get("1.0", tk.END).strip()
+
+        hid = self.historia_med_mgr.guardar(pid, fecha_eval, evaluador, datos)
+        self.status_var.set(f"Historia médica guardada (ID: {hid})")
+        messagebox.showinfo("Éxito", f"Historia médica guardada correctamente.\nID Registro: {hid}")
+
+    def _hm_ver_ultimo(self):
+        """Muestra el último registro de historia médica del paciente."""
+        try:
+            pid = int(self.hm_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+
+        historiales = self.historia_med_mgr.listar_por_paciente(pid)
+        if not historiales:
+            messagebox.showinfo("Sin registros", "No hay historias médicas para este paciente.")
+            return
+
+        ultimo = historiales[0]
+        texto = self.historia_med_mgr.generar_texto_reporte(ultimo)
+
+        win = tk.Toplevel(self.root)
+        win.title(f"Historia Médica — Paciente {pid}")
+        win.geometry("750x700")
+        text = scrolledtext.ScrolledText(win, font=('Consolas', 10), bg=COLOR_WHITE)
+        text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        text.insert("1.0", texto)
+        text.config(state=tk.DISABLED)
+
+    def _hm_limpiar(self):
+        """Limpia todos los campos del formulario."""
+        self.hm_paciente_id.delete(0, tk.END)
+        self.hm_nombre.config(state='normal')
+        self.hm_nombre.delete(0, tk.END)
+        self.hm_nombre.config(state='readonly')
+        self.hm_evaluador.delete(0, tk.END)
+        self.hm_fecha_eval.delete(0, tk.END)
+        self.hm_fecha_eval.insert(0, date.today().strftime("%d-%m-%Y"))
+        for campo in self.hm_campos.values():
+            campo.delete("1.0", tk.END)
+
+    # ==================================================================
+    # PESTAÑA 3: ANTROPOMETRÍA
+    # ==================================================================
+    def _crear_pestana_antropometria(self):
+        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
+        self.notebook.add(frame, text="  Antropometría  ")
+        parent = frame.inner
+
+        ttk.Label(parent, text="Evaluación Antropométrica por Edad", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Cálculos OMS — Clasificación de Desnutrición", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Selección de Paciente ---
+        sel_frame = ttk.LabelFrame(parent, text=" Paciente ", padding=10)
+        sel_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        r0 = ttk.Frame(sel_frame)
+        r0.pack(fill=tk.X, pady=2)
+        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
+        self.ant_paciente_id = ttk.Entry(r0, width=10)
+        self.ant_paciente_id.pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar Paciente", command=self._ant_cargar_paciente).pack(side=tk.LEFT, padx=5)
+        self.ant_paciente_id.bind("<Return>", lambda e: self._ant_cargar_paciente())
+
+        r0b = ttk.Frame(sel_frame)
+        r0b.pack(fill=tk.X, pady=2)
+        ttk.Label(r0b, text="Nombre:").pack(side=tk.LEFT, padx=5)
+        self.ant_nombre = ttk.Entry(r0b, width=30, state='readonly')
+        self.ant_nombre.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Fecha nac.:").pack(side=tk.LEFT, padx=5)
+        self.ant_fecha_nac = ttk.Entry(r0b, width=15, state='readonly')
+        self.ant_fecha_nac.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Sexo:").pack(side=tk.LEFT, padx=5)
+        self.ant_sexo = ttk.Entry(r0b, width=5, state='readonly')
+        self.ant_sexo.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Edad:").pack(side=tk.LEFT, padx=5)
+        self.ant_edad = ttk.Entry(r0b, width=15, state='readonly')
+        self.ant_edad.pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Mediciones Antropométricas ---
+        med_frame = ttk.LabelFrame(parent, text=" Mediciones Antropométricas ", padding=10)
+        med_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        rm1 = ttk.Frame(med_frame)
+        rm1.pack(fill=tk.X, pady=2)
+        ttk.Label(rm1, text="Peso (kg):").pack(side=tk.LEFT, padx=5)
+        self.ant_peso = ttk.Entry(rm1, width=10)
+        self.ant_peso.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm1, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
+        self.ant_talla = ttk.Entry(rm1, width=10)
+        self.ant_talla.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm1, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pc = ttk.Entry(rm1, width=10)
+        self.ant_pc.pack(side=tk.LEFT, padx=5)
+
+        rm2 = ttk.Frame(med_frame)
+        rm2.pack(fill=tk.X, pady=2)
+        ttk.Label(rm2, text="MUAC — Perímetro braquial (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_muac = ttk.Entry(rm2, width=10)
+        self.ant_muac.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm2, text="Pliegue triceps (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pliegue = ttk.Entry(rm2, width=10)
+        self.ant_pliegue.pack(side=tk.LEFT, padx=5)
+
+        rm3 = ttk.Frame(med_frame)
+        rm3.pack(fill=tk.X, pady=2)
+        self.ant_edema = tk.StringVar(value="no")
+        ttk.Label(rm3, text="Edema presente:").pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm3, text="Sí", variable=self.ant_edema, value="si", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm3, text="No", variable=self.ant_edema, value="no", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+
+        rm4 = ttk.Frame(med_frame)
+        rm4.pack(fill=tk.X, pady=2)
+        ttk.Label(rm4, text="Peso anterior (kg, opcional):").pack(side=tk.LEFT, padx=5)
+        self.ant_peso_anterior = ttk.Entry(rm4, width=10)
+        self.ant_peso_anterior.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm4, text="Talla anterior (cm, opcional):").pack(side=tk.LEFT, padx=5)
+        self.ant_talla_anterior = ttk.Entry(rm4, width=10)
+        self.ant_talla_anterior.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm4, text="Meses desde eval. anterior:").pack(side=tk.LEFT, padx=5)
+        self.ant_meses_anterior = ttk.Entry(rm4, width=10)
+        self.ant_meses_anterior.pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Botones ---
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn_frame, text="Evaluar Antropometría", style='Primary.TButton',
+                   command=self._ant_evaluar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Limpiar", command=self._ant_limpiar).pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Resultados ---
+        res_frame = ttk.LabelFrame(parent, text=" Resultados de Evaluación Antropométrica ", padding=10)
+        res_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        self.text_antropometria = scrolledtext.ScrolledText(res_frame, height=28, font=('Consolas', 10), bg=COLOR_WHITE)
+        self.text_antropometria.pack(fill=tk.BOTH, expand=True)
+
+    # ==================================================================
+    # PESTAÑA 4: LABORATORIOS
+    # ==================================================================
+    def _crear_pestana_laboratorios(self):
+        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
+        self.notebook.add(frame, text="  Laboratorios  ")
+        parent = frame.inner
+
+        ttk.Label(parent, text="Evaluación de Laboratorio en Nutrición Pediátrica", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Comparación de valores contra rangos normales según edad", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Selección de Paciente ---
+        sel_frame = ttk.LabelFrame(parent, text=" Paciente ", padding=10)
+        sel_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        r0 = ttk.Frame(sel_frame)
+        r0.pack(fill=tk.X, pady=2)
+        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
+        self.lab_paciente_id = ttk.Entry(r0, width=10)
+        self.lab_paciente_id.pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar Paciente", command=self._lab_cargar_paciente).pack(side=tk.LEFT, padx=5)
+        self.lab_paciente_id.bind("<Return>", lambda e: self._lab_cargar_paciente())
+
+        r0b = ttk.Frame(sel_frame)
+        r0b.pack(fill=tk.X, pady=2)
+        ttk.Label(r0b, text="Nombre:").pack(side=tk.LEFT, padx=5)
+        self.lab_nombre = ttk.Entry(r0b, width=30, state='readonly')
+        self.lab_nombre.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Sexo:").pack(side=tk.LEFT, padx=5)
+        self.lab_sexo = ttk.Entry(r0b, width=5, state='readonly')
+        self.lab_sexo.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r0b, text="Edad:").pack(side=tk.LEFT, padx=5)
+        self.lab_edad = ttk.Entry(r0b, width=15, state='readonly')
+        self.lab_edad.pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Captura de la Prueba ---
+        prueba_frame = ttk.LabelFrame(parent, text=" Nueva Prueba de Laboratorio ", padding=10)
+        prueba_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        rp1 = ttk.Frame(prueba_frame)
+        rp1.pack(fill=tk.X, pady=2)
+        ttk.Label(rp1, text="Prueba:").pack(side=tk.LEFT, padx=5)
+        self.lab_codigos = listar_pruebas()
+        nombres = [obtener_prueba(c)["nombre"] for c in self.lab_codigos]
+        self.lab_combo_prueba = ttk.Combobox(rp1, values=nombres, width=45, state="readonly")
+        self.lab_combo_prueba.pack(side=tk.LEFT, padx=5)
+        if nombres:
+            self.lab_combo_prueba.current(0)
+        self.lab_combo_prueba.bind("<<ComboboxSelected>>", self._lab_mostrar_info_prueba)
+        ttk.Label(rp1, text="Fecha de toma:").pack(side=tk.LEFT, padx=5)
+        self.lab_fecha_toma = ttk.Entry(rp1, width=15)
+        self.lab_fecha_toma.insert(0, date.today().strftime("%d-%m-%Y"))
+        self.lab_fecha_toma.pack(side=tk.LEFT, padx=5)
+
+        rp2 = ttk.Frame(prueba_frame)
+        rp2.pack(fill=tk.X, pady=2)
+        ttk.Label(rp2, text="Valor:").pack(side=tk.LEFT, padx=5)
+        self.lab_valor = ttk.Entry(rp2, width=15)
+        self.lab_valor.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rp2, text="Unidad:").pack(side=tk.LEFT, padx=5)
+        self.lab_combo_unidad = ttk.Combobox(rp2, values=[], width=12, state="readonly")
+        self.lab_combo_unidad.pack(side=tk.LEFT, padx=5)
+        ttk.Button(rp2, text="Evaluar y Guardar", style='Primary.TButton',
+                   command=self._lab_evaluar_guardar).pack(side=tk.LEFT, padx=10)
+
+        self.lab_info_prueba = ttk.Label(prueba_frame, text="", wraplength=1000, justify=tk.LEFT)
+        self.lab_info_prueba.pack(fill=tk.X, padx=5, pady=5)
+        self._lab_mostrar_info_prueba()
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Resultado de la última evaluación ---
+        res_frame = ttk.LabelFrame(parent, text=" Resultado ", padding=10)
+        res_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.lab_resultado_lbl = ttk.Label(res_frame, text="Sin evaluar.", font=('Segoe UI', 11, 'bold'))
+        self.lab_resultado_lbl.pack(anchor=tk.W, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        # --- Historial de laboratorios ---
+        hist_frame = ttk.LabelFrame(parent, text=" Historial de Laboratorios del Paciente ", padding=10)
+        hist_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        cols = ("ID", "Fecha", "Prueba", "Valor", "Unidad", "Rango de referencia", "Resultado")
+        self.tree_laboratorios = ttk.Treeview(hist_frame, columns=cols, show='headings', height=10)
+        for c in cols:
+            self.tree_laboratorios.heading(c, text=c)
+            self.tree_laboratorios.column(c, width=120, anchor=tk.CENTER)
+        self.tree_laboratorios.column("ID", width=40)
+        self.tree_laboratorios.column("Prueba", width=200, anchor=tk.W)
+        self.tree_laboratorios.column("Rango de referencia", width=180, anchor=tk.W)
+        lab_scroll = ttk.Scrollbar(hist_frame, orient=tk.VERTICAL, command=self.tree_laboratorios.yview)
+        self.tree_laboratorios.configure(yscrollcommand=lab_scroll.set)
+        self.tree_laboratorios.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        lab_scroll.pack(fill=tk.Y, side=tk.RIGHT)
+
+        btn_hist = ttk.Frame(parent)
+        btn_hist.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn_hist, text="Eliminar Registro Seleccionado", command=self._lab_eliminar_seleccionado).pack(side=tk.LEFT, padx=5)
+
+    def _lab_mostrar_info_prueba(self, event=None):
+        idx = self.lab_combo_prueba.current()
+        if idx < 0 or idx >= len(self.lab_codigos):
+            return
+        codigo = self.lab_codigos[idx]
+        prueba = obtener_prueba(codigo)
+        unidades = unidades_disponibles(codigo)
+        self.lab_combo_unidad.config(values=unidades)
+        self.lab_combo_unidad.current(0)
+        info = f"{prueba.get('descripcion', '')}"
+        if prueba.get('deficiencia'):
+            info += f"\nDeficiencia: {prueba['deficiencia']}"
+        if prueba.get('pitfalls'):
+            info += f"\nAtención: {prueba['pitfalls']}"
+        self.lab_info_prueba.config(text=info)
+
+    def _lab_cargar_paciente(self):
+        """Carga datos del paciente en la pestaña de laboratorios."""
+        try:
+            pid = int(self.lab_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        self.lab_nombre.config(state='normal')
+        self.lab_nombre.delete(0, tk.END)
+        self.lab_nombre.insert(0, paciente['nombre'])
+        self.lab_nombre.config(state='readonly')
+
+        self.lab_sexo.config(state='normal')
+        self.lab_sexo.delete(0, tk.END)
+        self.lab_sexo.insert(0, paciente['sexo'])
+        self.lab_sexo.config(state='readonly')
+
+        from datetime import date as date_cls
+        try:
+            fn = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            edad_txt = calcular_edad_texto(fn, date_cls.today())
+        except ValueError:
+            edad_txt = ""
+        self.lab_edad.config(state='normal')
+        self.lab_edad.delete(0, tk.END)
+        self.lab_edad.insert(0, edad_txt)
+        self.lab_edad.config(state='readonly')
+
+        self._lab_cargar_historial()
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Laboratorios")
+
+    def _lab_evaluar_guardar(self):
+        """Evalúa el valor de laboratorio ingresado contra el rango normal y lo guarda."""
+        try:
+            pid = int(self.lab_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        idx = self.lab_combo_prueba.current()
+        if idx < 0:
+            messagebox.showerror("Error", "Seleccione una prueba de laboratorio.")
+            return
+        codigo = self.lab_codigos[idx]
+        prueba = obtener_prueba(codigo)
+        unidad_ingresada = self.lab_combo_unidad.get() or prueba.get("unidad", "")
+
+        valor = self.lab_valor.get().strip()
+        if not valor:
+            messagebox.showwarning("Campo requerido", "Ingrese el valor de la prueba.")
+            return
+
+        try:
+            fecha_toma = _parsear_fecha(self.lab_fecha_toma.get())
+        except ValueError:
+            messagebox.showerror("Error", "Fecha de toma inválida (DD-MM-AAAA).")
+            return
+
+        fecha_nac = date.fromisoformat(paciente['fecha_nacimiento'])
+        edad_meses = calcular_edad_meses(fecha_nac, fecha_toma)
+
+        resultado = clasificar_resultado(codigo, valor, edad_meses, paciente['sexo'], unidad_ingresada)
+        if "error" in resultado:
+            messagebox.showerror("Error", resultado["error"])
+            return
+
+        observaciones = ""
+        if unidad_ingresada != prueba.get("unidad", ""):
+            observaciones = f"Valor original: {valor} {unidad_ingresada}"
+
+        self.laboratorio_mgr.guardar(
+            pid, fecha_toma, prueba["nombre"], f"{resultado['valor']:.4g}", prueba.get("unidad", ""),
+            edad_meses, resultado["clasificacion"], resultado["rango_texto"], observaciones
+        )
+
+        self.lab_resultado_lbl.config(
+            text=(f"{prueba['nombre']}: {valor} {unidad_ingresada}  →  {resultado['valor']:.4g} "
+                  f"{prueba.get('unidad', '')}  →  {resultado['clasificacion']}  "
+                  f"(Referencia: {resultado['rango_texto']} — {resultado['etiqueta_rango']})")
+        )
+        self.status_var.set(f"Resultado de laboratorio guardado: {resultado['clasificacion']}")
+        self.lab_valor.delete(0, tk.END)
+        self._lab_cargar_historial()
+
+    def _lab_cargar_historial(self):
+        try:
+            pid = int(self.lab_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            return
+        for item in self.tree_laboratorios.get_children():
+            self.tree_laboratorios.delete(item)
+        registros = self.laboratorio_mgr.listar_por_paciente(pid)
+        for r in registros:
+            self.tree_laboratorios.insert("", tk.END, values=(
+                r['id'], _mostrar_fecha(r['fecha_toma']), r['tipo_prueba'], r['valor'], r['unidad'],
+                r['rango_referencia'], r['resultado_clasificacion']
+            ))
+        self.status_var.set(f"{len(registros)} resultado(s) de laboratorio")
+
+    def _lab_eliminar_seleccionado(self):
+        sel = self.tree_laboratorios.selection()
+        if not sel:
+            messagebox.showwarning("Seleccionar", "Seleccione un registro de la lista.")
+            return
+        if messagebox.askyesno("Confirmar", "¿Eliminar el registro de laboratorio seleccionado?"):
+            vals = self.tree_laboratorios.item(sel[0], 'values')
+            self.laboratorio_mgr.eliminar(int(vals[0]))
+            self._lab_cargar_historial()
+
+    def _ant_cargar_paciente(self):
+        """Carga datos del paciente en la pestaña antropometría."""
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        self.ant_nombre.config(state='normal')
+        self.ant_nombre.delete(0, tk.END)
+        self.ant_nombre.insert(0, paciente['nombre'])
+        self.ant_nombre.config(state='readonly')
+
+        self.ant_fecha_nac.config(state='normal')
+        self.ant_fecha_nac.delete(0, tk.END)
+        self.ant_fecha_nac.insert(0, _mostrar_fecha(paciente['fecha_nacimiento']))
+        self.ant_fecha_nac.config(state='readonly')
+
+        self.ant_sexo.config(state='normal')
+        self.ant_sexo.delete(0, tk.END)
+        self.ant_sexo.insert(0, paciente['sexo'])
+        self.ant_sexo.config(state='readonly')
+
+        from datetime import date as date_cls
+        try:
+            fn = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            edad_txt = calcular_edad_texto(fn, date_cls.today())
+        except ValueError:
+            edad_txt = ""
+        self.ant_edad.config(state='normal')
+        self.ant_edad.delete(0, tk.END)
+        self.ant_edad.insert(0, edad_txt)
+        self.ant_edad.config(state='readonly')
+
+        if paciente['peso_kg']:
+            self.ant_peso.delete(0, tk.END)
+            self.ant_peso.insert(0, str(paciente['peso_kg']))
+        if paciente['talla_cm']:
+            self.ant_talla.delete(0, tk.END)
+            self.ant_talla.insert(0, str(paciente['talla_cm']))
+
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Antropometría")
+
+    def _ant_evaluar(self):
+        """Realiza la evaluación antropométrica completa."""
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        try:
+            peso = float(self.ant_peso.get().strip())
+            talla = float(self.ant_talla.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Peso y talla son obligatorios.")
+            return
+
+        fecha_nac = date.fromisoformat(paciente['fecha_nacimiento'])
+        sexo = paciente['sexo']
+
+        pc = 0
+        if self.ant_pc.get().strip():
+            pc = float(self.ant_pc.get().strip())
+
+        muac = 0
+        if self.ant_muac.get().strip():
+            muac = float(self.ant_muac.get().strip())
+
+        pliegue = 0
+        if self.ant_pliegue.get().strip():
+            pliegue = float(self.ant_pliegue.get().strip())
+
+        edema = self.ant_edema.get() == "si"
+
+        peso_ant = None
+        if self.ant_peso_anterior.get().strip():
+            peso_ant = float(self.ant_peso_anterior.get().strip())
+
+        talla_ant = None
+        if self.ant_talla_anterior.get().strip():
+            talla_ant = float(self.ant_talla_anterior.get().strip())
+
+        meses_ant = None
+        if self.ant_meses_anterior.get().strip():
+            meses_ant = float(self.ant_meses_anterior.get().strip())
+
+        reporte = generar_reporte_antropometrico(
+            nombre=paciente['nombre'],
+            fecha_nac=fecha_nac,
+            sexo=sexo,
+            peso_kg=peso,
+            talla_cm=talla,
+            perimetro_cefalico_cm=pc,
+            muac_mm=muac,
+            pliegue_triceps_mm=pliegue,
+            edema=edema,
+            peso_anterior_kg=peso_ant,
+            talla_anterior_cm=talla_ant,
+            meses_eval_anterior=meses_ant,
+        )
+
+        self.text_antropometria.delete("1.0", tk.END)
+        self.text_antropometria.insert("1.0", self._formatear_antropometria(reporte))
+        self.status_var.set(f"Antropometría evaluada: {reporte['clasificacion_oms']['estado_nutricional']}")
+
+    def _formatear_antropometria(self, r: dict) -> str:
+        cl = r['clasificacion_oms']
+        lineas = [
+            "=" * 68,
+            "   EVALUACIÓN ANTROPOMÉTRICA — TABLAS OMS",
+            "=" * 68,
+            "",
+            f"  Paciente:          {r['nombre']}",
+            f"  Edad:              {r['edad_texto']} ({r['edad_meses']} meses)",
+            f"  Sexo:              {r['sexo']}",
+            "",
+            "-" * 68,
+            "  MEDICIONES",
+            "-" * 68,
+            f"  Peso:              {r['peso_kg']} kg",
+            f"  Talla/Longitud:    {r['talla_cm']} cm",
+            f"  IMC:               {r['imc']} kg/m²",
+        ]
+        if r['perimetro_cefalico_cm'] > 0:
+            lineas.append(f"  Perímetro cefálico: {r['perimetro_cefalico_cm']} cm  →  {r['pc_clasificacion']}")
+        if r['muac_mm'] > 0:
+            lineas.append(f"  MUAC:              {r['muac_mm']} mm  →  {r['muac_clasificacion']}")
+        if r['pliegue_triceps_mm'] > 0:
+            lineas.append(f"  Pliegue triceps:   {r['pliegue_triceps_mm']} mm")
+
+        lineas += [
+            "",
+            "-" * 68,
+            "  Z-SCORES (Tabla OMS)",
+            "-" * 68,
+            f"  Peso/Edad:         {r['z_peso_edad']:+.2f}  →  {cl['estado_nutricional']}",
+            f"  Talla/Edad:        {r['z_talla_edad']:+.2f}  →  {cl['talla_edad']}",
+            f"  IMC/Edad:          {r['z_imc_edad']:+.2f}  →  {cl['imc_edad']}",
+            "",
+            "-" * 68,
+            "  PESO COMO PORCENTAJE",
+            "-" * 68,
+            f"  % Peso esperado:   {r['peso_porcentaje']}%",
+            f"  % Peso para talla: {r['peso_talla_porcentaje']}%",
+            "",
+            "-" * 68,
+            "  CLASIFICACIÓN WELLCOME (peso + edema)",
+            "-" * 68,
+            f"  →  {r['clasificacion_wellcome']}",
+        ]
+
+        if r['tasa_peso_semanal']:
+            lineas += [
+                "",
+                "-" * 68,
+                "  TASAS DE CRECIMIENTO ESPERADAS",
+                "-" * 68,
+                f"  Ganancia peso semanal esperada: {r['tasa_peso_semanal']} g/sem",
+                "  Longitud primer año: +25 cm | Segundo año: +12 cm",
+                "  Perímetro cefálico: +1 cm/mes (1er año) | +2 cm (2do año)",
+            ]
+
+        if r['alertas']:
+            lineas += [
+                "",
+                "=" * 68,
+                "  ⚠  ALERTAS / CRITERIOS DE INTERVENCIÓN",
+                "=" * 68,
+            ]
+            for a in r['alertas']:
+                lineas.append(f"  • {a}")
+
+        lineas += [
+            "",
+            "-" * 68,
+            "  REFERENCIA: Tabla 1 — Criterios de desnutrición OMS",
+            "-" * 68,
+            "  IMC > 30 = Obeso | > 25 = Sobrepeso",
+            "  Talla edad < 85% = Desnutrición | < 90% = Riesgo",
+            "  Peso/talla < 70% = Severa | 70-80% = Moderada",
+            "  Peso/talla 80-90% = Leve | 90-100% = Normal",
+            "",
+            "-" * 68,
+            "  REFERENCIA: Tabla 2 — Clasificación Wellcome",
+            "-" * 68,
+            "  Marasmo: < 60% peso sin edema",
+            "  Marasmic-Kwashiorkor: < 60% peso con edema",
+            "  Kwashiorkor: 60-80% peso con edema",
+            "  Desnutrición moderada: 60-80% peso sin edema",
+            "=" * 68,
+        ]
+        return "\n".join(lineas)
+
+    def _ant_limpiar(self):
+        for e in [self.ant_paciente_id, self.ant_peso, self.ant_talla, self.ant_pc,
+                  self.ant_muac, self.ant_pliegue, self.ant_peso_anterior,
+                  self.ant_talla_anterior, self.ant_meses_anterior]:
+            e.delete(0, tk.END)
+        self.ant_edema.set("no")
+        for w in [self.ant_nombre, self.ant_fecha_nac, self.ant_sexo, self.ant_edad]:
+            w.config(state='normal')
+            w.delete(0, tk.END)
+            w.config(state='readonly')
+        self.text_antropometria.delete("1.0", tk.END)
 
     # ==================================================================
     # MÉTODOS: PACIENTES
     # ==================================================================
     def _guardar_paciente(self):
         nombre = self.entry_nombre.get().strip()
-        apellido = self.entry_apellido.get().strip()
         fecha_nac = self.entry_fecha_nac.get().strip()
         sexo = self.combo_sexo.get()
         peso = self.entry_peso.get().strip()
         talla = self.entry_talla.get().strip()
 
-        if not nombre or not apellido or not fecha_nac:
-            messagebox.showwarning("Campos requeridos", "Nombre, apellido y fecha de nacimiento son obligatorios.")
+        if not nombre or not fecha_nac:
+            messagebox.showwarning("Campos requeridos", "Nombre y fecha de nacimiento son obligatorios.")
             return
+
         try:
-            fecha_dt = date.fromisoformat(fecha_nac)
+            fecha_dt = _parsear_fecha(fecha_nac)
         except ValueError:
-            messagebox.showerror("Error", "Formato de fecha inválido. Use AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato de fecha inválido. Use DD-MM-AAAA.")
             return
 
         peso_f = float(peso) if peso else 0.0
         talla_f = float(talla) if talla else 0.0
 
-        pid = self.patient_mgr.agregar_paciente(nombre, apellido, fecha_dt, sexo, peso_f, talla_f)
-        self.status_var.set(f"Paciente {nombre} {apellido} registrado con ID {pid}")
+        pid = self.patient_mgr.agregar_paciente(nombre, fecha_dt, sexo, peso_f, talla_f)
+        self.status_var.set(f"Paciente {nombre} registrado con ID {pid}")
         messagebox.showinfo("Éxito", f"Paciente registrado correctamente.\nID: {pid}")
         self._limpiar_formulario()
         self._cargar_pacientes()
 
     def _limpiar_formulario(self):
-        for e in [self.entry_nombre, self.entry_apellido, self.entry_fecha_nac, self.entry_peso, self.entry_talla]:
+        for e in [self.entry_nombre, self.entry_fecha_nac, self.entry_peso, self.entry_talla]:
             e.delete(0, tk.END)
         self.combo_sexo.set("M")
 
@@ -548,8 +1291,8 @@ class MainWindow:
         pacientes = self.patient_mgr.listar_pacientes()
         for p in pacientes:
             self.tree_pacientes.insert("", tk.END, values=(
-                p['id'], p['nombre'], p['apellido'],
-                p['fecha_nacimiento'], p['sexo'], p['peso_kg'], p['talla_cm']
+                p['id'], p['nombre'],
+                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm']
             ))
         self.status_var.set(f"{len(pacientes)} paciente(s) registrado(s)")
 
@@ -563,8 +1306,8 @@ class MainWindow:
         pacientes = self.patient_mgr.buscar_pacientes(termino)
         for p in pacientes:
             self.tree_pacientes.insert("", tk.END, values=(
-                p['id'], p['nombre'], p['apellido'],
-                p['fecha_nacimiento'], p['sexo'], p['peso_kg'], p['talla_cm']
+                p['id'], p['nombre'],
+                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm']
             ))
 
     def _seleccionar_paciente(self, event):
@@ -572,6 +1315,50 @@ class MainWindow:
         if sel:
             vals = self.tree_pacientes.item(sel[0], 'values')
             self.paciente_seleccionado = int(vals[0])
+            self._llenar_historia_desde_paciente(self.paciente_seleccionado)
+
+    def _llenar_historia_desde_paciente(self, paciente_id: int):
+        """Llena los campos de Historia Alimentaria desde un paciente seleccionado."""
+        paciente = self.patient_mgr.obtener_paciente(paciente_id)
+        if not paciente:
+            return
+
+        self.ha_paciente_id.delete(0, tk.END)
+        self.ha_paciente_id.insert(0, str(paciente_id))
+
+        self.ha_nombre.delete(0, tk.END)
+        self.ha_nombre.insert(0, paciente['nombre'])
+
+        self.ha_fecha_nac.delete(0, tk.END)
+        self.ha_fecha_nac.insert(0, _mostrar_fecha(paciente['fecha_nacimiento']))
+
+        self.ha_edad.delete(0, tk.END)
+        from datetime import date as date_cls
+        try:
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            edad_dias = (date_cls.today() - fecha_nac).days
+            if edad_dias < 30:
+                self.ha_edad.insert(0, f"{edad_dias} días")
+            elif edad_dias < 365:
+                meses = round(edad_dias / 30.44)
+                self.ha_edad.insert(0, f"{meses} meses")
+            else:
+                anios = round(edad_dias / 365.25, 1)
+                self.ha_edad.insert(0, f"{anios} años")
+        except ValueError:
+            pass
+
+        self.ha_sexo.set(paciente['sexo'])
+
+        # También llena Historia Médica
+        self.hm_paciente_id.delete(0, tk.END)
+        self.hm_paciente_id.insert(0, str(paciente_id))
+        self.hm_nombre.config(state='normal')
+        self.hm_nombre.delete(0, tk.END)
+        self.hm_nombre.insert(0, paciente['nombre'])
+        self.hm_nombre.config(state='readonly')
+
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en todas las pestañas")
 
     def _eliminar_paciente(self):
         if not self.paciente_seleccionado:
@@ -599,7 +1386,7 @@ class MainWindow:
             return
 
         try:
-            fecha_eval = date.fromisoformat(self.entry_eval_fecha.get().strip())
+            fecha_eval = _parsear_fecha(self.entry_eval_fecha.get())
         except ValueError:
             messagebox.showerror("Error", "Fecha de evaluación inválida.")
             return
@@ -613,7 +1400,7 @@ class MainWindow:
             return
 
         reporte = generar_reporte_evaluacion(
-            paciente['nombre'], paciente['apellido'],
+            paciente['nombre'],
             fecha_nac, paciente['sexo'], peso, talla, fecha_eval
         )
 
@@ -666,7 +1453,7 @@ class MainWindow:
         for h in historial:
             imc = calcular_imc(h['peso_kg'], h['talla_cm']) if h['talla_cm'] else 0
             self.tree_seguimiento.insert("", tk.END, values=(
-                h['fecha'], h['peso_kg'], h['talla_cm'],
+                _mostrar_fecha(h['fecha']), h['peso_kg'], h['talla_cm'],
                 imc, h.get('perimetro_cefalico_cm', ''), h.get('observaciones', '')
             ))
         self.status_var.set(f"{len(historial)} registro(s) de crecimiento")
@@ -707,6 +1494,43 @@ class MainWindow:
     # ==================================================================
     # MÉTODOS: HISTORIA ALIMENTARIA
     # ==================================================================
+    def _cargar_paciente_en_historia(self):
+        """Carga los datos del paciente en el formulario de historia alimentaria."""
+        try:
+            pid = int(self.ha_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+
+        self.ha_nombre.delete(0, tk.END)
+        self.ha_nombre.insert(0, paciente['nombre'])
+
+        self.ha_fecha_nac.delete(0, tk.END)
+        self.ha_fecha_nac.insert(0, _mostrar_fecha(paciente['fecha_nacimiento']))
+
+        self.ha_edad.delete(0, tk.END)
+        from datetime import date as date_cls
+        try:
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            edad_dias = (date_cls.today() - fecha_nac).days
+            if edad_dias < 30:
+                self.ha_edad.insert(0, f"{edad_dias} días")
+            elif edad_dias < 365:
+                meses = round(edad_dias / 30.44)
+                self.ha_edad.insert(0, f"{meses} meses")
+            else:
+                anios = round(edad_dias / 365.25, 1)
+                self.ha_edad.insert(0, f"{anios} años")
+        except ValueError:
+            pass
+
+        self.ha_sexo.set(paciente['sexo'])
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Historia Alimentaria")
     def _recopilar_datos_historia(self) -> dict:
         """Recopila todos los campos del formulario de historia alimentaria."""
         tipo = self.ha_tipo_alimentacion.get()
@@ -791,9 +1615,9 @@ class MainWindow:
             return
 
         try:
-            fecha_eval = date.fromisoformat(self.ha_fecha_eval.get().strip())
+            fecha_eval = _parsear_fecha(self.ha_fecha_eval.get())
         except ValueError:
-            messagebox.showerror("Error", "Fecha de evaluación inválida (AAAA-MM-DD).")
+            messagebox.showerror("Error", "Fecha de evaluación inválida (DD-MM-AAAA).")
             return
 
         evaluador = self.ha_evaluador.get().strip()
@@ -864,7 +1688,8 @@ class MainWindow:
             "• Evaluación nutricional (Z-scores, IMC)\n"
             "• Seguimiento de crecimiento\n"
             "• Requerimientos nutricionales\n"
-            "• Historia alimentaria completa"
+            "• Historia alimentaria completa\n"
+            "• Laboratorios con clasificación por edad"
         )
 
     def _on_close(self):

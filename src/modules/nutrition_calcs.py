@@ -4,7 +4,7 @@ Incluye IMC para edad, talla para edad, peso para edad,
 requerimientos energéticos y evaluación nutricional.
 """
 import math
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, Any
 from datetime import date, datetime
 
 
@@ -206,7 +206,7 @@ def calcular_requerimientos_caloricos(edad_meses: float, peso_kg: float, talla_c
 
 
 def generar_reporte_evaluacion(
-    nombre: str, apellido: str, fecha_nac: date, sexo: str,
+    nombre: str, fecha_nac: date, sexo: str,
     peso_kg: float, talla_cm: float, fecha_eval: date
 ) -> Dict[str, Any]:
     """
@@ -225,7 +225,7 @@ def generar_reporte_evaluacion(
     requerimientos = calcular_requerimientos_caloricos(edad, peso_kg, talla_cm)
 
     return {
-        'paciente': f"{nombre} {apellido}",
+        'paciente': nombre,
         'edad_meses': edad,
         'peso_kg': peso_kg,
         'talla_cm': talla_cm,
