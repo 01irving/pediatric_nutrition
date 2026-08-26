@@ -734,11 +734,10 @@ class MainWindow:
 
         r2 = ttk.Frame(datos_frame)
         r2.pack(fill=tk.X, pady=2)
-        from datetime import date as _date
         ttk.Label(r2, text="Fecha visita:").pack(side=tk.LEFT, padx=5)
         self.ant_fecha_visita = ttk.Entry(r2, width=12)
         self.ant_fecha_visita.pack(side=tk.LEFT, padx=5)
-        self.ant_fecha_visita.insert(0, _date.today().isoformat())
+        self.ant_fecha_visita.insert(0, date.today().strftime("%d-%m-%Y"))
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
@@ -812,19 +811,9 @@ class MainWindow:
         sel_res = ttk.LabelFrame(res_frame, text=" Indicador a Evaluar ", padding=5)
         sel_res.pack(fill=tk.X, pady=5)
         self.ant_indicador_var = tk.StringVar(value="lhfa")
-        INDICADORES_RADIO = [
-            ("lhfa", "Longitud/Altura-Edad"),
-            ("wfa", "Peso-Edad"),
-            ("wflh", "Peso-Longitud/Altura"),
-            ("bmi", "IMC-Edad"),
-            ("hcfa", "Perímetro Cefálico-Edad"),
-            ("acfa", "MUAC-Edad"),
-            ("tsfa", "Pliegue Tríceps-Edad"),
-            ("ssfa", "Pliegue Subescapular-Edad"),
-        ]
         radio_grid = ttk.Frame(sel_res)
         radio_grid.pack(fill=tk.X, padx=5)
-        for idx, (code, label) in enumerate(INDICADORES_RADIO):
+        for idx, (code, label) in enumerate(self.INDICADORES_RADIO):
             r, c = divmod(idx, 2)
             tk.Radiobutton(
                 radio_grid, text=label, variable=self.ant_indicador_var, value=code,
@@ -1151,9 +1140,9 @@ class MainWindow:
             return
 
         try:
-            fecha_visita = date_cls.fromisoformat(self.ant_fecha_visita.get().strip())
+            fecha_visita = _parsear_fecha(self.ant_fecha_visita.get().strip())
         except ValueError:
-            messagebox.showerror("Error", "Fecha de visita inválida (use YYYY-MM-DD).")
+            messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
             return
 
         peso = None
@@ -1233,6 +1222,17 @@ class MainWindow:
         "tsfa": "Pliegue Tríceps-Edad",
         "ssfa": "Pliegue Subescapular-Edad",
     }
+
+    INDICADORES_RADIO = [
+        ("lhfa", "Longitud/Altura-Edad"),
+        ("wfa", "Peso-Edad"),
+        ("wflh", "Peso-Longitud/Altura"),
+        ("bmi", "IMC-Edad"),
+        ("hcfa", "Perímetro Cefálico-Edad"),
+        ("acfa", "MUAC-Edad"),
+        ("tsfa", "Pliegue Tríceps-Edad"),
+        ("ssfa", "Pliegue Subescapular-Edad"),
+    ]
 
     def _ant_cambiar_indicador(self):
         codigo = self.ant_indicador_var.get()
@@ -1346,7 +1346,7 @@ class MainWindow:
 
         try:
             fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
-            fecha_visita = date_cls.fromisoformat(self.ant_fecha_visita.get().strip())
+            fecha_visita = _parsear_fecha(self.ant_fecha_visita.get().strip())
         except ValueError:
             messagebox.showerror("Error", "Fechas inválidas.")
             return
@@ -1440,7 +1440,7 @@ class MainWindow:
         self.ant_edema.set("no")
         self.ant_tipo_med.set("Decúbito (L)")
         self.ant_fecha_visita.delete(0, tk.END)
-        self.ant_fecha_visita.insert(0, date.today().isoformat())
+        self.ant_fecha_visita.insert(0, date.today().strftime("%d-%m-%Y"))
         self._resultado_actual = None
         self.ant_resultado_text.config(state='normal')
         self.ant_resultado_text.delete("1.0", tk.END)
