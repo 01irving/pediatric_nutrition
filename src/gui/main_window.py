@@ -1434,15 +1434,17 @@ class MainWindow:
             for w in chart_frame.winfo_children():
                 w.destroy()
             modo = mode_var.get()
+            edad_d = resultado['edad_dias']
             kwargs = {"modo": modo}
             if indicador == "lhfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], talla,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d,
+                                   tipo_medicion=tipo_med, **kwargs)
             elif indicador == "wfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], peso,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d, **kwargs)
             elif indicador == "wflh":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    talla, peso, paciente['nombre'],
@@ -1450,15 +1452,16 @@ class MainWindow:
             elif indicador == "bmi":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'],
-                                   resultado['imc'] or 0, paciente['nombre'], **kwargs)
+                                   resultado['imc'] or 0, paciente['nombre'],
+                                   edad_dias=edad_d, **kwargs)
             elif indicador == "hcfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], pc,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d, **kwargs)
             elif indicador == "acfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], muac,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d, **kwargs)
             elif indicador == "tsfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], pliegue,

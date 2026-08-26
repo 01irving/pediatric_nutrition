@@ -341,7 +341,8 @@ def _z_to_percentil(z):
     return round(z_to_percentile(z), 1) if z is not None else None
 
 
-def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zscore"):
+def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zscore",
+                         edad_dias=None, tipo_medicion="L"):
     table = _load_table("day_lhfa.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -354,8 +355,9 @@ def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zs
     meses = [d / DAYS_PER_MONTH for d in dias]
     curvas = _generar_curvas(table, sexo, dias)
     from anthro import compute as _compute
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
     params = {'sex': 'male' if sexo in ('M', 'male') else 'female',
-              'age_days': int(edad_meses * DAYS_PER_MONTH), 'height_cm': talla_cm}
+              'age_days': age_d, 'height_cm': talla_cm, 'measure': tipo_medicion}
     try:
         z = _compute(params).get('z_lhfa', 0)
     except Exception:
@@ -366,7 +368,8 @@ def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zs
                             percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zscore"):
+def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zscore",
+                        edad_dias=None):
     table = _load_table("day_wfa.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -379,8 +382,9 @@ def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zsco
     meses = [d / DAYS_PER_MONTH for d in dias]
     curvas = _generar_curvas(table, sexo, dias)
     from anthro import compute as _compute
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
     params = {'sex': 'male' if sexo in ('M', 'male') else 'female',
-              'age_days': int(edad_meses * DAYS_PER_MONTH), 'weight_kg': peso_kg}
+              'age_days': age_d, 'weight_kg': peso_kg}
     try:
         z = _compute(params).get('z_wfa', 0)
     except Exception:
@@ -417,7 +421,8 @@ def generar_grafica_wflh(parent, sexo, talla_cm, peso_kg, nombre="", modo="zscor
                             percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zscore"):
+def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zscore",
+                        edad_dias=None):
     table = _load_table("day_bmi.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -430,8 +435,9 @@ def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zsco
     meses = [d / DAYS_PER_MONTH for d in dias]
     curvas = _generar_curvas(table, sexo, dias)
     from anthro import compute as _compute
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
     params = {'sex': 'male' if sexo in ('M', 'male') else 'female',
-              'age_days': int(edad_meses * DAYS_PER_MONTH),
+              'age_days': age_d,
               'weight_kg': bmi_val, 'height_cm': 100}
     try:
         res = _compute(params)
@@ -444,7 +450,8 @@ def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zsco
                             percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_hcfa(parent, sexo, edad_meses, pc_cm, nombre="", modo="zscore"):
+def generar_grafica_hcfa(parent, sexo, edad_meses, pc_cm, nombre="", modo="zscore",
+                         edad_dias=None):
     from src.modules.who_anthro_calc import _PC_LMS_BOYS, _PC_LMS_GIRLS
     table = {
         "M": _build_table_from_tuples(_PC_LMS_BOYS),
@@ -461,14 +468,16 @@ def generar_grafica_hcfa(parent, sexo, edad_meses, pc_cm, nombre="", modo="zscor
     meses = [d / DAYS_PER_MONTH for d in dias_filtrados]
     curvas = _generar_curvas(table, sexo, dias_filtrados)
     from src.modules.who_anthro_calc import calcular_z_pc
-    z = calcular_z_pc(sexo, int(edad_meses * DAYS_PER_MONTH), pc_cm) or 0
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
+    z = calcular_z_pc(sexo, age_d, pc_cm) or 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, pc_cm,
                             z, nombre, "Perímetro Cefálico para Edad",
                             "Edad (meses)", "Perímetro Cefálico (cm)", modo,
                             percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zscore"):
+def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zscore",
+                         edad_dias=None):
     table = _load_table("day_acfa.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -481,8 +490,9 @@ def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zsc
     meses = [d / DAYS_PER_MONTH for d in dias]
     curvas = _generar_curvas(table, sexo, dias)
     from anthro import compute as _compute
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
     params = {'sex': 'male' if sexo in ('M', 'male') else 'female',
-              'age_days': int(edad_meses * DAYS_PER_MONTH), 'muac_mm': muac_mm}
+              'age_days': age_d, 'muac_mm': muac_mm}
     try:
         z = _compute(params).get('z_acfa', 0)
     except Exception:
