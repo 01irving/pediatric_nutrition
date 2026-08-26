@@ -2,10 +2,108 @@
 Calculadora antropométrica OMS inspirada en WHO Anthro PC v3.2.2.
 Wrapper sobre la librería 'anthro' con clasificaciones y banderas oficiales.
 """
+import math
 from datetime import date, timedelta
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 
 from anthro import compute as _anthro_compute, age_days as _anthro_age_days
+
+# ── Conversión Z-score → Percentil ───────────────────────────────────────────
+
+def z_to_percentile(z: float) -> float:
+    """Aproximación normal CDF (Abramowitz & Stegun) → percentil (0-100)."""
+    if z < -8:
+        return 0.0
+    if z > 8:
+        return 100.0
+    a1, a2, a3, a4, a5 = (0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429)
+    p = 0.3275911
+    sign = 1 if z >= 0 else -1
+    x = abs(z) / math.sqrt(2)
+    t = 1.0 / (1.0 + p * x)
+    y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * math.exp(-x * x)
+    return (0.5 * (1.0 + sign * y)) * 100.0
+
+
+def clasificar_z(z: float) -> str:
+    """Clasificación WHO según Z-score."""
+    if z is None:
+        return "N/A"
+    if z < -3:
+        return "Desnutrición severa"
+    elif z < -2:
+        return "Desnutrición moderada"
+    elif z < -1:
+        return "Riesgo de desnutrición"
+    elif z <= 1:
+        return "Normal"
+    elif z <= 2:
+        return "Riesgo de sobrepeso"
+    elif z <= 3:
+        return "Sobrepeso"
+    else:
+        return "Obesidad"
+
+
+# ── Perímetro Cefálico para Edad (PC/Edad) ──────────────────────────────────
+# WHO LMS values for head circumference-for-age (compact, key ages in days)
+# Source: WHO Child Growth Standards 2006, Appendix Table C
+
+_PC_LMS_BOYS = [
+    (0, 1, 34.8895, 0.03454), (15, 1, 35.8895, 0.03383), (30, 1, 36.8395, 0.03319),
+    (60, 1, 38.3935, 0.03223), (90, 1, 39.4969, 0.03176), (120, 1, 40.3518, 0.03165),
+    (150, 1, 41.0254, 0.03174), (180, 1, 41.5597, 0.03193), (210, 1, 41.9877, 0.03217),
+    (240, 1, 42.3339, 0.03243), (270, 1, 42.6175, 0.03269), (300, 1, 42.8545, 0.03293),
+    (330, 1, 43.0560, 0.03314), (365, 1, 43.2932, 0.03337), (400, 1, 43.4852, 0.03357),
+    (456, 1, 43.7706, 0.03387), (547, 1, 44.1770, 0.03428), (640, 1, 44.5241, 0.03462),
+    (730, 1, 44.8203, 0.03490), (820, 1, 45.0743, 0.03513), (910, 1, 45.2930, 0.03532),
+    (1000, 1, 45.4820, 0.03548), (1095, 1, 45.6934, 0.03562), (1280, 1, 45.9880, 0.03583),
+    (1460, 1, 46.2191, 0.03598), (1640, 1, 46.3973, 0.03609), (1825, 1, 46.5370, 0.03617),
+]
+
+_PC_LMS_GIRLS = [
+    (0, 1, 34.4636, 0.03281), (15, 1, 35.3956, 0.03227), (30, 1, 36.2836, 0.03182),
+    (60, 1, 37.7454, 0.03118), (90, 1, 38.7602, 0.03089), (120, 1, 39.5415, 0.03082),
+    (150, 1, 40.1468, 0.03091), (180, 1, 40.6227, 0.03109), (210, 1, 41.0052, 0.03130),
+    (240, 1, 41.3187, 0.03152), (270, 1, 41.5801, 0.03174), (300, 1, 41.8003, 0.03194),
+    (330, 1, 41.9867, 0.03212), (365, 1, 42.1990, 0.03233), (400, 1, 42.3738, 0.03251),
+    (456, 1, 42.6248, 0.03277), (547, 1, 42.9770, 0.03313), (640, 1, 43.2740, 0.03343),
+    (730, 1, 43.5252, 0.03367), (820, 1, 43.7397, 0.03387), (910, 1, 43.9234, 0.03404),
+    (1000, 1, 44.0816, 0.03418), (1095, 1, 44.2597, 0.03431), (1280, 1, 44.5518, 0.03450),
+    (1460, 1, 44.7831, 0.03464), (1640, 1, 44.9641, 0.03475), (1825, 1, 45.1101, 0.03483),
+]
+
+
+def _interpolate_pc_lms(table, age_days: int) -> Optional[Tuple[float, float, float]]:
+    """Interpola L, M, S para una edad dada (en días)."""
+    if age_days <= table[0][0]:
+        return table[0][1], table[0][2], table[0][3]
+    if age_days >= table[-1][0]:
+        return table[-1][1], table[-1][2], table[-1][3]
+    for i in range(len(table) - 1):
+        d1, l1, m1, s1 = table[i]
+        d2, l2, m2, s2 = table[i + 1]
+        if d1 <= age_days <= d2:
+            f = (age_days - d1) / (d2 - d1) if d2 != d1 else 0
+            L = l1 + f * (l2 - l1)
+            M = m1 + f * (m2 - m1)
+            S = s1 + f * (s2 - s1)
+            return L, M, S
+    return None
+
+
+def calcular_z_pc(sexo: str, edad_dias: int, pc_cm: float) -> Optional[float]:
+    """Calcula Z-score de perímetro cefálico para la edad usando LMS OMS."""
+    table = _PC_LMS_BOYS if sexo in ("M", "male") else _PC_LMS_GIRLS
+    lms = _interpolate_pc_lms(table, edad_dias)
+    if lms is None:
+        return None
+    L, M, S = lms
+    if abs(L) < 1e-10:
+        z = math.log(pc_cm / M) / S
+    else:
+        z = ((pc_cm / M) ** L - 1) / (L * S)
+    return round(z, 2)
 
 
 def calcular_edad(fecha_nacimiento: date, fecha_visita: date) -> int:
@@ -126,6 +224,22 @@ def evaluar_antropometria(
         talla_m = talla_cm / 100.0
         bmi_val = round(peso_kg / (talla_m ** 2), 1)
 
+    # Perímetro cefálico para edad
+    z_pc = None
+    clasif_pc = "N/A"
+    if pc_cm is not None:
+        z_pc = calcular_z_pc(sexo, edad_dias, pc_cm)
+        if z_pc is not None:
+            clasif_pc = clasificar_z(z_pc)
+
+    # Percentiles
+    perc_lhfa = round(z_to_percentile(z_lhfa), 1) if z_lhfa is not None else None
+    perc_wfa = round(z_to_percentile(z_wfa), 1) if z_wfa is not None else None
+    perc_wflh = round(z_to_percentile(z_wflh), 1) if z_wflh is not None else None
+    perc_bmi = round(z_to_percentile(z_bmi), 1) if z_bmi is not None else None
+    perc_acfa = round(z_to_percentile(z_acfa), 1) if z_acfa is not None else None
+    perc_pc = round(z_to_percentile(z_pc), 1) if z_pc is not None else None
+
     # Clasificación Wellcome (solo si hay edema)
     clasificacion_wellcome = None
     if edema:
@@ -151,17 +265,33 @@ def evaluar_antropometria(
         "z_wflh": round(z_wflh, 2) if z_wflh is not None else None,
         "z_bmi": round(z_bmi, 2) if z_bmi is not None else None,
         "z_acfa": round(z_acfa, 2) if z_acfa is not None else None,
+        "z_pc": z_pc,
         "clasif_lhfa": clasif_lhfa,
         "clasif_wfa": clasif_wfa,
         "clasif_wflh": clasif_wflh,
         "clasif_bmi": clasif_bmi,
         "clasif_muac": clasif_muac,
+        "clasif_pc": clasif_pc,
         "clasif_wellcome": clasificacion_wellcome,
         "flag_lhfa": flag_lhfa,
         "flag_wfa": flag_wfa,
         "flag_wflh": flag_wflh,
         "flag_bmi": flag_bmi,
         "flag_acfa": flag_acfa,
+        "perc_lhfa": perc_lhfa,
+        "perc_wfa": perc_wfa,
+        "perc_wflh": perc_wflh,
+        "perc_bmi": perc_bmi,
+        "perc_acfa": perc_acfa,
+        "perc_pc": perc_pc,
+        "z_tsfa": None,
+        "z_ssfa": None,
+        "perc_tsfa": None,
+        "perc_ssfa": None,
+        "clasif_tsfa": "Medición registrada (sin tabla OMS)" if pliegue_triceps_mm else "N/A",
+        "clasif_ssfa": "Medición registrada (sin tabla OMS)" if pliegue_subescapular_mm else "N/A",
+        "pliegue_triceps_mm": pliegue_triceps_mm,
+        "pliegue_subescapular_mm": pliegue_subescapular_mm,
         "errores": errores,
         "advertencias": advertencias + resultado_anthro.get("warnings", []),
     }
@@ -173,9 +303,17 @@ def _resultado_con_errores(errores):
         "sexo": None, "talla_original_cm": None, "talla_ajustada_cm": None,
         "conversion_l_h": None, "peso_kg": None, "edema": False, "imc": None,
         "z_lhfa": None, "z_wfa": None, "z_wflh": None, "z_bmi": None, "z_acfa": None,
+        "z_pc": None,
         "clasif_lhfa": "N/A", "clasif_wfa": "N/A", "clasif_wflh": "N/A",
-        "clasif_bmi": "N/A", "clasif_muac": "N/A", "clasif_wellcome": None,
+        "clasif_bmi": "N/A", "clasif_muac": "N/A", "clasif_pc": "N/A",
+        "clasif_wellcome": None,
         "flag_lhfa": 0, "flag_wfa": 0, "flag_wflh": 0, "flag_bmi": 0, "flag_acfa": 0,
+        "perc_lhfa": None, "perc_wfa": None, "perc_wflh": None,
+        "perc_bmi": None, "perc_acfa": None, "perc_pc": None,
+        "z_tsfa": None, "z_ssfa": None,
+        "perc_tsfa": None, "perc_ssfa": None,
+        "clasif_tsfa": "N/A", "clasif_ssfa": "N/A",
+        "pliegue_triceps_mm": None, "pliegue_subescapular_mm": None,
         "errores": errores, "advertencias": [],
     }
 

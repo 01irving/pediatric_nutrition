@@ -697,18 +697,8 @@ class MainWindow:
     # PESTAÑA 3: ANTROPOMETRÍA
     # ==================================================================
     def _crear_pestana_antropometria(self):
-        frame = ttk.Frame(self.notebook, padding=0)
-        self.notebook.add(frame, text="  Antropometría  ")
-
-        self.ant_notebook = ttk.Notebook(frame)
-        self.ant_notebook.pack(fill=tk.BOTH, expand=True)
-
-        self._crear_subpestana_antropometria_general()
-        self._crear_subpestana_who_chart()
-
-    def _crear_subpestana_antropometria_general(self):
-        scroll = ScrollFrame(self.ant_notebook, bg=COLOR_BG)
-        self.ant_notebook.add(scroll, text="  Evaluación General  ")
+        scroll = ScrollFrame(self.notebook, bg=COLOR_BG)
+        self.notebook.add(scroll, text="  Antropometría  ")
         parent = scroll.inner
 
         ttk.Label(parent, text="Calculadora Antropométrica OMS (WHO Anthro)", style='Title.TLabel').pack(anchor=tk.W, padx=5)
@@ -756,43 +746,55 @@ class MainWindow:
         med_frame = ttk.LabelFrame(parent, text=" Mediciones Antropométricas ", padding=10)
         med_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        rm1 = ttk.Frame(med_frame)
-        rm1.pack(fill=tk.X, pady=2)
-        ttk.Label(rm1, text="Peso (kg):").pack(side=tk.LEFT, padx=5)
-        self.ant_peso = ttk.Entry(rm1, width=10)
+        rm_peso = ttk.Frame(med_frame)
+        rm_peso.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_peso, text="Peso (kg):").pack(side=tk.LEFT, padx=5)
+        self.ant_peso = ttk.Entry(rm_peso, width=10)
         self.ant_peso.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm1, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
-        self.ant_talla = ttk.Entry(rm1, width=10)
+
+        rm_talla = ttk.Frame(med_frame)
+        rm_talla.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_talla, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
+        self.ant_talla = ttk.Entry(rm_talla, width=10)
         self.ant_talla.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm1, text="Tipo medida:").pack(side=tk.LEFT, padx=(15,5))
-        self.ant_tipo_med = ttk.Combobox(rm1, values=["Decúbito (L)", "Bipedestación (H)"], width=18, state="readonly")
+
+        rm_tipo = ttk.Frame(med_frame)
+        rm_tipo.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_tipo, text="Tipo medida:").pack(side=tk.LEFT, padx=5)
+        self.ant_tipo_med = ttk.Combobox(rm_tipo, values=["Decúbito (L)", "Bipedestación (H)"], width=18, state="readonly")
         self.ant_tipo_med.pack(side=tk.LEFT, padx=5)
         self.ant_tipo_med.set("Decúbito (L)")
 
-        rm2 = ttk.Frame(med_frame)
-        rm2.pack(fill=tk.X, pady=2)
-        ttk.Label(rm2, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
-        self.ant_pc = ttk.Entry(rm2, width=10)
+        rm_pc = ttk.Frame(med_frame)
+        rm_pc.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_pc, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pc = ttk.Entry(rm_pc, width=10)
         self.ant_pc.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm2, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
-        self.ant_muac = ttk.Entry(rm2, width=10)
+
+        rm_muac = ttk.Frame(med_frame)
+        rm_muac.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_muac, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_muac = ttk.Entry(rm_muac, width=10)
         self.ant_muac.pack(side=tk.LEFT, padx=5)
 
-        rm3 = ttk.Frame(med_frame)
-        rm3.pack(fill=tk.X, pady=2)
-        ttk.Label(rm3, text="Pliegue triceps (mm):").pack(side=tk.LEFT, padx=5)
-        self.ant_pliegue = ttk.Entry(rm3, width=10)
+        rm_tri = ttk.Frame(med_frame)
+        rm_tri.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_tri, text="Pliegue triceps (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pliegue = ttk.Entry(rm_tri, width=10)
         self.ant_pliegue.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm3, text="Pliegue subescapular (mm):").pack(side=tk.LEFT, padx=5)
-        self.ant_pliegue_sub = ttk.Entry(rm3, width=10)
+
+        rm_sub = ttk.Frame(med_frame)
+        rm_sub.pack(fill=tk.X, pady=2)
+        ttk.Label(rm_sub, text="Pliegue subescapular (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pliegue_sub = ttk.Entry(rm_sub, width=10)
         self.ant_pliegue_sub.pack(side=tk.LEFT, padx=5)
 
-        rm4 = ttk.Frame(med_frame)
-        rm4.pack(fill=tk.X, pady=2)
+        rm_edema = ttk.Frame(med_frame)
+        rm_edema.pack(fill=tk.X, pady=2)
         self.ant_edema = tk.StringVar(value="no")
-        ttk.Label(rm4, text="Edema:").pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(rm4, text="Sí", variable=self.ant_edema, value="si", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(rm4, text="No", variable=self.ant_edema, value="no", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm_edema, text="Edema:").pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm_edema, text="Sí", variable=self.ant_edema, value="si", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm_edema, text="No", variable=self.ant_edema, value="no", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
@@ -806,158 +808,42 @@ class MainWindow:
 
         res_frame = ttk.LabelFrame(parent, text=" Resultados ", padding=10)
         res_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        self.text_antropometria = scrolledtext.ScrolledText(res_frame, height=22, font=('Consolas', 10), bg=COLOR_WHITE)
-        self.text_antropometria.pack(fill=tk.BOTH, expand=True)
 
-    # ==================================================================
-    # SUB-PESTAÑA: GRÁFICAS OMS (PDF embebido)
-    # ==================================================================
-    WHO_CHARTS = {
-        'Longitud/Altura-Edad': {
-            'Niño': {
-                '0-2 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-lfa-boys-z-0-2.pdf',
-                '2-5 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-hfa-boys-z-2-5.pdf',
-                '0-5 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-lhfa-boys-z-0-5.pdf',
-                '% 0-2 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-lfa-boys-p-0-2.pdf',
-                '% 2-5 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-hfa-boys-p-2-5.pdf',
-                '% 0-5 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-lhfa-boys-p-0-5.pdf',
-            },
-            'Niña': {
-                '0-2 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-lfa-girls-z-0-2.pdf',
-                '2-5 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-hfa-girls-z-2-5.pdf',
-                '0-5 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-lhfa-girls-z-0-5.pdf',
-                '% 0-2 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-lfa-girls-p-0-2.pdf',
-                '% 2-5 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-hfa-girls-p-2-5.pdf',
-                '% 0-5 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-lhfa-girls-p-0-5.pdf',
-            },
-        },
-    }
+        sel_res = ttk.LabelFrame(res_frame, text=" Indicador a Evaluar ", padding=5)
+        sel_res.pack(fill=tk.X, pady=5)
+        self.ant_indicador_var = tk.StringVar(value="lhfa")
+        INDICADORES_RADIO = [
+            ("lhfa", "Longitud/Altura-Edad"),
+            ("wfa", "Peso-Edad"),
+            ("wflh", "Peso-Longitud/Altura"),
+            ("bmi", "IMC-Edad"),
+            ("hcfa", "Perímetro Cefálico-Edad"),
+            ("acfa", "MUAC-Edad"),
+            ("tsfa", "Pliegue Tríceps-Edad"),
+            ("ssfa", "Pliegue Subescapular-Edad"),
+        ]
+        radio_grid = ttk.Frame(sel_res)
+        radio_grid.pack(fill=tk.X, padx=5)
+        for idx, (code, label) in enumerate(INDICADORES_RADIO):
+            r, c = divmod(idx, 2)
+            tk.Radiobutton(
+                radio_grid, text=label, variable=self.ant_indicador_var, value=code,
+                bg=COLOR_BG, font=('Segoe UI', 10),
+                command=self._ant_cambiar_indicador
+            ).grid(row=r, column=c, sticky=tk.W, padx=10, pady=2)
+        self.ant_indicador = self.ant_indicador_var
 
-    def _crear_subpestana_who_chart(self):
-        scroll = ScrollFrame(self.ant_notebook, bg=COLOR_BG)
-        self.ant_notebook.add(scroll, text="  Gráficas OMS  ")
-        parent = scroll.inner
+        self.ant_resultado_frame = ttk.Frame(res_frame)
+        self.ant_resultado_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        ttk.Label(parent, text="Gráficas WHO de Referencia", style='Title.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Label(parent, text="Visualización de gráficas oficiales OMS (PDF embebidos)", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+        self.ant_resultado_text = tk.Text(self.ant_resultado_frame, height=16, font=('Consolas', 11),
+                                          bg=COLOR_WHITE, relief=tk.FLAT, padx=15, pady=10)
+        self.ant_resultado_text.pack(fill=tk.BOTH, expand=True)
+        self.ant_resultado_text.insert("1.0", "Ingrese datos y presione 'Evaluar' para ver resultados.")
+        self.ant_resultado_text.config(state=tk.DISABLED)
 
-        ctrl = ttk.Frame(parent)
-        ctrl.pack(fill=tk.X, padx=10, pady=5)
-
-        ttk.Label(ctrl, text="Categoría:").pack(side=tk.LEFT, padx=5)
-        self.who_cat = ttk.Combobox(ctrl, values=list(self.WHO_CHARTS.keys()), width=25, state="readonly")
-        self.who_cat.pack(side=tk.LEFT, padx=5)
-        self.who_cat.set(list(self.WHO_CHARTS.keys())[0])
-        self.who_cat.bind("<<ComboboxSelected>>", self._who_actualizar_sexo)
-
-        ttk.Label(ctrl, text="Sexo:").pack(side=tk.LEFT, padx=5)
-        self.who_sexo = ttk.Combobox(ctrl, values=["Niño", "Niña"], width=8, state="readonly")
-        self.who_sexo.pack(side=tk.LEFT, padx=5)
-        self.who_sexo.set("Niño")
-        self.who_sexo.bind("<<ComboboxSelected>>", self._who_actualizar_rango)
-
-        ttk.Label(ctrl, text="Rango:").pack(side=tk.LEFT, padx=5)
-        self.who_rango = ttk.Combobox(ctrl, values=[], width=15, state="readonly")
-        self.who_rango.pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(ctrl, text="Mostrar Gráfica", style='Primary.TButton',
-                   command=self._who_mostrar).pack(side=tk.LEFT, padx=10)
-        ttk.Button(ctrl, text="Abrir PDF externo", command=self._who_abrir_pdf).pack(side=tk.LEFT, padx=5)
-
-        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
-
-        self.who_chart_frame = ttk.Frame(parent)
-        self.who_chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        self.who_canvas = tk.Canvas(self.who_chart_frame, height=400, bg='#f0f0f0')
-        self.who_canvas.pack(fill=tk.BOTH, expand=True)
-        self.who_canvas.create_text(400, 200, text="Seleccione categoría, sexo y rango, luego presione 'Mostrar Gráfica'",
-                                    font=('Segoe UI', 11), fill='#888')
-
-        self._who_actualizar_sexo()
-
-    def _who_actualizar_sexo(self, event=None):
-        cat = self.who_cat.get()
-        sexos = list(self.WHO_CHARTS.get(cat, {}).keys())
-        self.who_sexo.config(values=sexos)
-        if sexos:
-            self.who_sexo.set(sexos[0])
-        self._who_actualizar_rango()
-
-    def _who_actualizar_rango(self, event=None):
-        cat = self.who_cat.get()
-        sexo = self.who_sexo.get()
-        rangos = list(self.WHO_CHARTS.get(cat, {}).get(sexo, {}).keys())
-        self.who_rango.config(values=rangos)
-        if rangos:
-            self.who_rango.set(rangos[0])
-
-    def _who_get_pdf_path(self):
-        cat = self.who_cat.get()
-        sexo = self.who_sexo.get()
-        rango = self.who_rango.get()
-        rel = self.WHO_CHARTS.get(cat, {}).get(sexo, {}).get(rango)
-        if not rel:
-            return None
-        from pathlib import Path as P
-        return P(__file__).resolve().parent.parent.parent / "WHO_antro_tablas" / rel
-
-    def _who_mostrar(self):
-        pdf_path = self._who_get_pdf_path()
-        if not pdf_path or not pdf_path.exists():
-            messagebox.showerror("Error", f"No se encontró el archivo:\n{pdf_path}")
-            return
-        try:
-            import fitz
-            from PIL import Image as PILImage, ImageTk
-            import io
-            doc = fitz.open(str(pdf_path))
-            page = doc[0]
-            zoom = 2.0
-            mat = fitz.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat)
-            img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            doc.close()
-
-            self._who_pil_img = img
-
-            for w in self.who_chart_frame.winfo_children():
-                w.destroy()
-
-            canvas = tk.Canvas(self.who_chart_frame, bg='#f0f0f0', highlightthickness=0)
-            canvas.pack(fill=tk.BOTH, expand=True)
-
-            canvas_img = ImageTk.PhotoImage(img)
-            canvas._img_ref = canvas_img
-
-            cw = max(img.width, 700)
-            ch = max(img.height, 500)
-            canvas.config(width=cw, height=ch)
-            canvas.create_image(0, 0, anchor=tk.NW, image=canvas_img)
-
-            vsb = ttk.Scrollbar(self.who_chart_frame, orient=tk.VERTICAL, command=canvas.yview)
-            hsb = ttk.Scrollbar(self.who_chart_frame, orient=tk.HORIZONTAL, command=canvas.xview)
-            canvas.config(yscrollcommand=vsb.set, xscrollcommand=hsb.set, scrollregion=(0, 0, img.width, img.height))
-            vsb.pack(side=tk.RIGHT, fill=tk.Y)
-            hsb.pack(side=tk.BOTTOM, fill=tk.X)
-
-            sexo = self.who_sexo.get()
-            rango = self.who_rango.get()
-            self.status_var.set(f"Gráfica OMS mostrada: {sexo} — {rango}")
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo renderizar el PDF:\n{e}")
-
-    def _who_abrir_pdf(self):
-        pdf_path = self._who_get_pdf_path()
-        if not pdf_path or not pdf_path.exists():
-            messagebox.showerror("Error", "Archivo no encontrado.")
-            return
-        import subprocess
-        try:
-            subprocess.Popen([str(pdf_path)], shell=True)
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo abrir:\n{e}")
+        self._resultado_actual = None
+        self._ant_cambiar_indicador()
 
     # ==================================================================
     # PESTAÑA 4: LABORATORIOS
@@ -1246,7 +1132,7 @@ class MainWindow:
 
     def _ant_evaluar(self):
         from datetime import date as date_cls
-        from src.modules.who_anthro_calc import evaluar_antropometria, formatear_resultado
+        from src.modules.who_anthro_calc import evaluar_antropometria
 
         try:
             pid = int(self.ant_paciente_id.get().strip())
@@ -1311,13 +1197,125 @@ class MainWindow:
             pliegue_subescapular_mm=pliegue_sub,
         )
 
-        texto = formatear_resultado(resultado)
-        self.text_antropometria.config(state='normal')
-        self.text_antropometria.delete("1.0", tk.END)
-        self.text_antropometria.insert("1.0", texto)
-        self.text_antropometria.config(state='disabled')
-
+        self._resultado_actual = resultado
+        self._ant_mostrar_indicador()
         self.status_var.set("Evaluación antropométrica completada — WHO Anthro")
+
+    INDICADORES_MAP = {
+        "lhfa": ("z_lhfa", "perc_lhfa", "clasif_lhfa", "flag_lhfa"),
+        "wfa": ("z_wfa", "perc_wfa", "clasif_wfa", "flag_wfa"),
+        "wflh": ("z_wflh", "perc_wflh", "clasif_wflh", "flag_wflh"),
+        "bmi": ("z_bmi", "perc_bmi", "clasif_bmi", "flag_bmi"),
+        "hcfa": ("z_pc", "perc_pc", "clasif_pc", None),
+        "acfa": ("z_acfa", "perc_acfa", "clasif_muac", "flag_acfa"),
+        "tsfa": ("z_tsfa", "perc_tsfa", "clasif_tsfa", None),
+        "ssfa": ("z_ssfa", "perc_ssfa", "clasif_ssfa", None),
+    }
+
+    INDICADOR_CAMPOS = {
+        "lhfa": ["ant_talla", "ant_tipo_med"],
+        "wfa": ["ant_peso"],
+        "wflh": ["ant_peso", "ant_talla", "ant_tipo_med"],
+        "bmi": ["ant_peso", "ant_talla", "ant_tipo_med"],
+        "hcfa": ["ant_pc"],
+        "acfa": ["ant_muac"],
+        "tsfa": ["ant_pliegue"],
+        "ssfa": ["ant_pliegue_sub"],
+    }
+
+    INDICADOR_NOMBRES = {
+        "lhfa": "Longitud/Altura-Edad",
+        "wfa": "Peso-Edad",
+        "wflh": "Peso-Longitud/Altura",
+        "bmi": "IMC-Edad",
+        "hcfa": "Perímetro Cefálico-Edad",
+        "acfa": "MUAC-Edad",
+        "tsfa": "Pliegue Tríceps-Edad",
+        "ssfa": "Pliegue Subescapular-Edad",
+    }
+
+    def _ant_cambiar_indicador(self):
+        codigo = self.ant_indicador_var.get()
+        campos_requeridos = self.INDICADOR_CAMPOS.get(codigo, [])
+        for attr_name in ["ant_peso", "ant_talla", "ant_tipo_med", "ant_pc",
+                          "ant_muac", "ant_pliegue", "ant_pliegue_sub"]:
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            parent_frame = widget.master
+            if attr_name in campos_requeridos:
+                try:
+                    parent_frame.pack(fill=tk.X, pady=2)
+                except Exception:
+                    pass
+            else:
+                try:
+                    parent_frame.pack_forget()
+                except Exception:
+                    pass
+        if self._resultado_actual is not None:
+            self._ant_mostrar_indicador()
+
+    def _ant_mostrar_indicador(self, event=None):
+        r = self._resultado_actual
+        if r is None:
+            return
+
+        codigo = self.ant_indicador_var.get()
+        nombre = self.INDICADOR_NOMBRES.get(codigo, codigo)
+        z_key, perc_key, clasif_key, flag_key = self.INDICADORES_MAP.get(codigo, (None, None, None, None))
+
+        z_val = r.get(z_key) if z_key else None
+        perc_val = r.get(perc_key) if perc_key else None
+        clasif_val = r.get(clasif_key, "N/A") if clasif_key else "N/A"
+        flag_val = r.get(flag_key, 0) if flag_key else 0
+
+        t = self.ant_resultado_text
+        t.config(state='normal')
+        t.delete("1.0", tk.END)
+
+        t.insert("1.0", f"\n  {nombre}\n")
+        t.insert(tk.END, f"\n  {'=' * 48}\n")
+
+        med_val = (r.get('talla_original_cm') or r.get('peso_kg') or
+                   r.get('pc_cm') or r.get('muac_mm') or '')
+        if codigo == "tsfa" and r.get('pliegue_triceps_mm'):
+            med_val = f"{r['pliegue_triceps_mm']} mm"
+        elif codigo == "ssfa" and r.get('pliegue_subescapular_mm'):
+            med_val = f"{r['pliegue_subescapular_mm']} mm"
+        t.insert(tk.END, f"\n  Valor medido:   {med_val}\n")
+
+        if z_val is not None:
+            color_z = "▼" if z_val < -2 else ("▲" if z_val > 2 else "●")
+            t.insert(tk.END, f"\n  Z-score:        {z_val:+.2f}  {color_z}\n")
+        else:
+            t.insert(tk.END, "\n  Z-score:        N/A\n")
+
+        if perc_val is not None:
+            t.insert(tk.END, f"\n  Percentil (P):  {perc_val:.1f}%\n")
+        else:
+            t.insert(tk.END, "\n  Percentil (P):  N/A\n")
+
+        t.insert(tk.END, f"\n  Clasificación:  {clasif_val}\n")
+
+        if flag_val and flag_val != 0:
+            t.insert(tk.END, f"\n  Bandera:        ±{abs(flag_val)} (fuera de rango)\n")
+
+        t.insert(tk.END, f"\n  {'=' * 48}\n")
+        t.insert(tk.END, f"\n  Todos los indicadores:\n\n")
+
+        for ind_code in self.INDICADORES_MAP:
+            zk, pk, ck, fk = self.INDICADORES_MAP[ind_code]
+            ind_nombre = self.INDICADOR_NOMBRES.get(ind_code, ind_code)
+            zv = r.get(zk)
+            pv = r.get(pk)
+            cv = r.get(ck, "N/A")
+            z_str = f"{zv:+.2f}" if zv is not None else "  N/A"
+            p_str = f"P{pv:.0f}" if pv is not None else " N/A"
+            marker = " ◄" if ind_code == codigo else ""
+            t.insert(tk.END, f"  {ind_nombre:.<32s} Z={z_str:>7s}  {p_str:>5s}  {cv}{marker}\n")
+
+        t.config(state=tk.DISABLED)
 
     def _ant_ubicar_grafica(self):
         """Abre ventana con gráfica OMS y punto del paciente ubicado."""
@@ -1443,9 +1441,12 @@ class MainWindow:
         self.ant_tipo_med.set("Decúbito (L)")
         self.ant_fecha_visita.delete(0, tk.END)
         self.ant_fecha_visita.insert(0, date.today().isoformat())
-        self.text_antropometria.config(state='normal')
-        self.text_antropometria.delete("1.0", tk.END)
-        self.text_antropometria.config(state='disabled')
+        self._resultado_actual = None
+        self.ant_resultado_text.config(state='normal')
+        self.ant_resultado_text.delete("1.0", tk.END)
+        self.ant_resultado_text.insert("1.0", "Ingrese datos y presione 'Evaluar' para ver resultados.")
+        self.ant_resultado_text.config(state='disabled')
+        self._ant_cambiar_indicador()
 
     # ==================================================================
     # MÉTODOS: PACIENTES
