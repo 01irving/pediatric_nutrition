@@ -136,6 +136,7 @@ def _dibujar_grafica(
     eje_y_text: str,
     modo: str = "zscore",
     x_formatter=None,
+    percentil_paciente: float = None,
 ) -> tk.Canvas:
     """
     Función genérica para dibujar gráfica OMS en Canvas.
@@ -270,7 +271,11 @@ def _dibujar_grafica(
 
     color_punto = '#27ae60' if abs(z_paciente) <= 2 else '#e74c3c'
     canvas.create_oval(px - 8, py - 8, px + 8, py + 8, fill=color_punto, outline='white', width=2)
-    label_txt = f"{nombre_paciente}\n{paciente_y:.1f}\nZ={z_paciente:+.2f}" if nombre_paciente else f"{paciente_y:.1f}\nZ={z_paciente:+.2f}"
+    if modo == "percentil" and percentil_paciente is not None:
+        marca = f"P{percentil_paciente:.0f}"
+    else:
+        marca = f"Z={z_paciente:+.2f}"
+    label_txt = f"{nombre_paciente}\n{paciente_y:.1f}\n{marca}" if nombre_paciente else f"{paciente_y:.1f}\n{marca}"
     canvas.create_text(px + 14, py - 14, text=label_txt, font=('Segoe UI', 8, 'bold'),
                        fill=color_punto, anchor=tk.W)
 
@@ -331,6 +336,11 @@ def _edad_key_to_meses(key):
 
 # ── Funciones por indicador ─────────────────────────────────────────────────
 
+def _z_to_percentil(z):
+    from src.modules.who_anthro_calc import z_to_percentile
+    return round(z_to_percentile(z), 1) if z is not None else None
+
+
 def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zscore"):
     table = _load_table("day_lhfa.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
@@ -352,7 +362,8 @@ def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zs
         z = 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, talla_cm,
                             z, nombre, "Longitud/Altura para Edad",
-                            "Edad (meses)", "Longitud / Altura (cm)", modo)
+                            "Edad (meses)", "Longitud / Altura (cm)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zscore"):
@@ -376,7 +387,8 @@ def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zsco
         z = 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, peso_kg,
                             z, nombre, "Peso para Edad",
-                            "Edad (meses)", "Peso (kg)", modo)
+                            "Edad (meses)", "Peso (kg)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_wflh(parent, sexo, talla_cm, peso_kg, nombre="", modo="zscore", tipo_med="L"):
@@ -401,7 +413,8 @@ def generar_grafica_wflh(parent, sexo, talla_cm, peso_kg, nombre="", modo="zscor
         z = 0
     return _dibujar_grafica(parent, sexo, tallas_filtradas, curvas, talla_cm, peso_kg,
                             z, nombre, "Peso para Longitud/Altura",
-                            "Longitud / Altura (cm)", "Peso (kg)", modo)
+                            "Longitud / Altura (cm)", "Peso (kg)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zscore"):
@@ -427,7 +440,8 @@ def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zsco
         z = 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, bmi_val,
                             z, nombre, "IMC para Edad",
-                            "Edad (meses)", "IMC (kg/m²)", modo)
+                            "Edad (meses)", "IMC (kg/m²)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_hcfa(parent, sexo, edad_meses, pc_cm, nombre="", modo="zscore"):
@@ -450,7 +464,8 @@ def generar_grafica_hcfa(parent, sexo, edad_meses, pc_cm, nombre="", modo="zscor
     z = calcular_z_pc(sexo, int(edad_meses * DAYS_PER_MONTH), pc_cm) or 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, pc_cm,
                             z, nombre, "Perímetro Cefálico para Edad",
-                            "Edad (meses)", "Perímetro Cefálico (cm)", modo)
+                            "Edad (meses)", "Perímetro Cefálico (cm)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zscore"):
@@ -474,7 +489,8 @@ def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zsc
         z = 0
     return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, muac_mm,
                             z, nombre, "MUAC para Edad",
-                            "Edad (meses)", "MUAC (mm)", modo)
+                            "Edad (meses)", "MUAC (mm)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 def generar_grafica_tsfa(parent, sexo, edad_meses, triceps_mm, nombre="", modo="zscore"):
