@@ -697,44 +697,62 @@ class MainWindow:
     # PESTAÑA 3: ANTROPOMETRÍA
     # ==================================================================
     def _crear_pestana_antropometria(self):
-        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
+        frame = ttk.Frame(self.notebook, padding=0)
         self.notebook.add(frame, text="  Antropometría  ")
-        parent = frame.inner
 
-        ttk.Label(parent, text="Evaluación Antropométrica por Edad", style='Title.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Label(parent, text="Cálculos OMS — Clasificación de Desnutrición", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        self.ant_notebook = ttk.Notebook(frame)
+        self.ant_notebook.pack(fill=tk.BOTH, expand=True)
+
+        self._crear_subpestana_antropometria_general()
+        self._crear_subpestana_who_chart()
+
+    def _crear_subpestana_antropometria_general(self):
+        scroll = ScrollFrame(self.ant_notebook, bg=COLOR_BG)
+        self.ant_notebook.add(scroll, text="  Evaluación General  ")
+        parent = scroll.inner
+
+        ttk.Label(parent, text="Calculadora Antropométrica OMS (WHO Anthro)", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Z-scores y clasificaciones según WHO Child Growth Standards", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
-        # --- Selección de Paciente ---
-        sel_frame = ttk.LabelFrame(parent, text=" Paciente ", padding=10)
-        sel_frame.pack(fill=tk.X, padx=10, pady=5)
+        # --- Datos del niño ---
+        datos_frame = ttk.LabelFrame(parent, text=" Datos del Niño ", padding=10)
+        datos_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        r0 = ttk.Frame(sel_frame)
+        r0 = ttk.Frame(datos_frame)
         r0.pack(fill=tk.X, pady=2)
         ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
         self.ant_paciente_id = ttk.Entry(r0, width=10)
         self.ant_paciente_id.pack(side=tk.LEFT, padx=5)
-        ttk.Button(r0, text="Cargar Paciente", command=self._ant_cargar_paciente).pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar", command=self._ant_cargar_paciente).pack(side=tk.LEFT, padx=5)
         self.ant_paciente_id.bind("<Return>", lambda e: self._ant_cargar_paciente())
-
-        r0b = ttk.Frame(sel_frame)
-        r0b.pack(fill=tk.X, pady=2)
-        ttk.Label(r0b, text="Nombre:").pack(side=tk.LEFT, padx=5)
-        self.ant_nombre = ttk.Entry(r0b, width=30, state='readonly')
+        ttk.Label(r0, text="Nombre:").pack(side=tk.LEFT, padx=(20,5))
+        self.ant_nombre = ttk.Entry(r0, width=25, state='readonly')
         self.ant_nombre.pack(side=tk.LEFT, padx=5)
-        ttk.Label(r0b, text="Fecha nac.:").pack(side=tk.LEFT, padx=5)
-        self.ant_fecha_nac = ttk.Entry(r0b, width=15, state='readonly')
+
+        r1 = ttk.Frame(datos_frame)
+        r1.pack(fill=tk.X, pady=2)
+        ttk.Label(r1, text="Fecha nac.:").pack(side=tk.LEFT, padx=5)
+        self.ant_fecha_nac = ttk.Entry(r1, width=12, state='readonly')
         self.ant_fecha_nac.pack(side=tk.LEFT, padx=5)
-        ttk.Label(r0b, text="Sexo:").pack(side=tk.LEFT, padx=5)
-        self.ant_sexo = ttk.Entry(r0b, width=5, state='readonly')
+        ttk.Label(r1, text="Sexo:").pack(side=tk.LEFT, padx=(10,5))
+        self.ant_sexo = ttk.Entry(r1, width=5, state='readonly')
         self.ant_sexo.pack(side=tk.LEFT, padx=5)
-        ttk.Label(r0b, text="Edad:").pack(side=tk.LEFT, padx=5)
-        self.ant_edad = ttk.Entry(r0b, width=15, state='readonly')
+        ttk.Label(r1, text="Edad:").pack(side=tk.LEFT, padx=(10,5))
+        self.ant_edad = ttk.Entry(r1, width=20, state='readonly')
         self.ant_edad.pack(side=tk.LEFT, padx=5)
+
+        r2 = ttk.Frame(datos_frame)
+        r2.pack(fill=tk.X, pady=2)
+        from datetime import date as _date
+        ttk.Label(r2, text="Fecha visita:").pack(side=tk.LEFT, padx=5)
+        self.ant_fecha_visita = ttk.Entry(r2, width=12)
+        self.ant_fecha_visita.pack(side=tk.LEFT, padx=5)
+        self.ant_fecha_visita.insert(0, _date.today().isoformat())
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
-        # --- Mediciones Antropométricas ---
+        # --- Mediciones ---
         med_frame = ttk.LabelFrame(parent, text=" Mediciones Antropométricas ", padding=10)
         med_frame.pack(fill=tk.X, padx=10, pady=5)
 
@@ -746,55 +764,200 @@ class MainWindow:
         ttk.Label(rm1, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
         self.ant_talla = ttk.Entry(rm1, width=10)
         self.ant_talla.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm1, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
-        self.ant_pc = ttk.Entry(rm1, width=10)
-        self.ant_pc.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm1, text="Tipo medida:").pack(side=tk.LEFT, padx=(15,5))
+        self.ant_tipo_med = ttk.Combobox(rm1, values=["Decúbito (L)", "Bipedestación (H)"], width=18, state="readonly")
+        self.ant_tipo_med.pack(side=tk.LEFT, padx=5)
+        self.ant_tipo_med.set("Decúbito (L)")
 
         rm2 = ttk.Frame(med_frame)
         rm2.pack(fill=tk.X, pady=2)
-        ttk.Label(rm2, text="MUAC — Perímetro braquial (mm):").pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm2, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pc = ttk.Entry(rm2, width=10)
+        self.ant_pc.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm2, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
         self.ant_muac = ttk.Entry(rm2, width=10)
         self.ant_muac.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm2, text="Pliegue triceps (mm):").pack(side=tk.LEFT, padx=5)
-        self.ant_pliegue = ttk.Entry(rm2, width=10)
-        self.ant_pliegue.pack(side=tk.LEFT, padx=5)
 
         rm3 = ttk.Frame(med_frame)
         rm3.pack(fill=tk.X, pady=2)
-        self.ant_edema = tk.StringVar(value="no")
-        ttk.Label(rm3, text="Edema presente:").pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(rm3, text="Sí", variable=self.ant_edema, value="si", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(rm3, text="No", variable=self.ant_edema, value="no", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm3, text="Pliegue triceps (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pliegue = ttk.Entry(rm3, width=10)
+        self.ant_pliegue.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm3, text="Pliegue subescapular (mm):").pack(side=tk.LEFT, padx=5)
+        self.ant_pliegue_sub = ttk.Entry(rm3, width=10)
+        self.ant_pliegue_sub.pack(side=tk.LEFT, padx=5)
 
         rm4 = ttk.Frame(med_frame)
         rm4.pack(fill=tk.X, pady=2)
-        ttk.Label(rm4, text="Peso anterior (kg, opcional):").pack(side=tk.LEFT, padx=5)
-        self.ant_peso_anterior = ttk.Entry(rm4, width=10)
-        self.ant_peso_anterior.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm4, text="Talla anterior (cm, opcional):").pack(side=tk.LEFT, padx=5)
-        self.ant_talla_anterior = ttk.Entry(rm4, width=10)
-        self.ant_talla_anterior.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rm4, text="Meses desde eval. anterior:").pack(side=tk.LEFT, padx=5)
-        self.ant_meses_anterior = ttk.Entry(rm4, width=10)
-        self.ant_meses_anterior.pack(side=tk.LEFT, padx=5)
+        self.ant_edema = tk.StringVar(value="no")
+        ttk.Label(rm4, text="Edema:").pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm4, text="Sí", variable=self.ant_edema, value="si", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(rm4, text="No", variable=self.ant_edema, value="no", bg=COLOR_BG).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
-        # --- Botones ---
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Button(btn_frame, text="Evaluar Antropometría", style='Primary.TButton',
-                   command=self._ant_evaluar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Evaluar", style='Primary.TButton', command=self._ant_evaluar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Ubicar en Gráfica", command=self._ant_ubicar_grafica).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Limpiar", command=self._ant_limpiar).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
-        # --- Resultados ---
-        res_frame = ttk.LabelFrame(parent, text=" Resultados de Evaluación Antropométrica ", padding=10)
+        res_frame = ttk.LabelFrame(parent, text=" Resultados ", padding=10)
         res_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        self.text_antropometria = scrolledtext.ScrolledText(res_frame, height=28, font=('Consolas', 10), bg=COLOR_WHITE)
+        self.text_antropometria = scrolledtext.ScrolledText(res_frame, height=22, font=('Consolas', 10), bg=COLOR_WHITE)
         self.text_antropometria.pack(fill=tk.BOTH, expand=True)
+
+    # ==================================================================
+    # SUB-PESTAÑA: GRÁFICAS OMS (PDF embebido)
+    # ==================================================================
+    WHO_CHARTS = {
+        'Longitud/Altura-Edad': {
+            'Niño': {
+                '0-2 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-lfa-boys-z-0-2.pdf',
+                '2-5 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-hfa-boys-z-2-5.pdf',
+                '0-5 años':   'Length_HeigthforAge/Charts/Z-scores-boys/cht-lhfa-boys-z-0-5.pdf',
+                '% 0-2 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-lfa-boys-p-0-2.pdf',
+                '% 2-5 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-hfa-boys-p-2-5.pdf',
+                '% 0-5 años': 'Length_HeigthforAge/Charts/Percentiles-boys/cht-lhfa-boys-p-0-5.pdf',
+            },
+            'Niña': {
+                '0-2 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-lfa-girls-z-0-2.pdf',
+                '2-5 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-hfa-girls-z-2-5.pdf',
+                '0-5 años':   'Length_HeigthforAge/Charts/Z-scores-girls/cht-lhfa-girls-z-0-5.pdf',
+                '% 0-2 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-lfa-girls-p-0-2.pdf',
+                '% 2-5 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-hfa-girls-p-2-5.pdf',
+                '% 0-5 años': 'Length_HeigthforAge/Charts/Percentiles-girls/cht-lhfa-girls-p-0-5.pdf',
+            },
+        },
+    }
+
+    def _crear_subpestana_who_chart(self):
+        scroll = ScrollFrame(self.ant_notebook, bg=COLOR_BG)
+        self.ant_notebook.add(scroll, text="  Gráficas OMS  ")
+        parent = scroll.inner
+
+        ttk.Label(parent, text="Gráficas WHO de Referencia", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Visualización de gráficas oficiales OMS (PDF embebidos)", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        ctrl = ttk.Frame(parent)
+        ctrl.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(ctrl, text="Categoría:").pack(side=tk.LEFT, padx=5)
+        self.who_cat = ttk.Combobox(ctrl, values=list(self.WHO_CHARTS.keys()), width=25, state="readonly")
+        self.who_cat.pack(side=tk.LEFT, padx=5)
+        self.who_cat.set(list(self.WHO_CHARTS.keys())[0])
+        self.who_cat.bind("<<ComboboxSelected>>", self._who_actualizar_sexo)
+
+        ttk.Label(ctrl, text="Sexo:").pack(side=tk.LEFT, padx=5)
+        self.who_sexo = ttk.Combobox(ctrl, values=["Niño", "Niña"], width=8, state="readonly")
+        self.who_sexo.pack(side=tk.LEFT, padx=5)
+        self.who_sexo.set("Niño")
+        self.who_sexo.bind("<<ComboboxSelected>>", self._who_actualizar_rango)
+
+        ttk.Label(ctrl, text="Rango:").pack(side=tk.LEFT, padx=5)
+        self.who_rango = ttk.Combobox(ctrl, values=[], width=15, state="readonly")
+        self.who_rango.pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(ctrl, text="Mostrar Gráfica", style='Primary.TButton',
+                   command=self._who_mostrar).pack(side=tk.LEFT, padx=10)
+        ttk.Button(ctrl, text="Abrir PDF externo", command=self._who_abrir_pdf).pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        self.who_chart_frame = ttk.Frame(parent)
+        self.who_chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        self.who_canvas = tk.Canvas(self.who_chart_frame, height=400, bg='#f0f0f0')
+        self.who_canvas.pack(fill=tk.BOTH, expand=True)
+        self.who_canvas.create_text(400, 200, text="Seleccione categoría, sexo y rango, luego presione 'Mostrar Gráfica'",
+                                    font=('Segoe UI', 11), fill='#888')
+
+        self._who_actualizar_sexo()
+
+    def _who_actualizar_sexo(self, event=None):
+        cat = self.who_cat.get()
+        sexos = list(self.WHO_CHARTS.get(cat, {}).keys())
+        self.who_sexo.config(values=sexos)
+        if sexos:
+            self.who_sexo.set(sexos[0])
+        self._who_actualizar_rango()
+
+    def _who_actualizar_rango(self, event=None):
+        cat = self.who_cat.get()
+        sexo = self.who_sexo.get()
+        rangos = list(self.WHO_CHARTS.get(cat, {}).get(sexo, {}).keys())
+        self.who_rango.config(values=rangos)
+        if rangos:
+            self.who_rango.set(rangos[0])
+
+    def _who_get_pdf_path(self):
+        cat = self.who_cat.get()
+        sexo = self.who_sexo.get()
+        rango = self.who_rango.get()
+        rel = self.WHO_CHARTS.get(cat, {}).get(sexo, {}).get(rango)
+        if not rel:
+            return None
+        from pathlib import Path as P
+        return P(__file__).resolve().parent.parent.parent / "WHO_antro_tablas" / rel
+
+    def _who_mostrar(self):
+        pdf_path = self._who_get_pdf_path()
+        if not pdf_path or not pdf_path.exists():
+            messagebox.showerror("Error", f"No se encontró el archivo:\n{pdf_path}")
+            return
+        try:
+            import fitz
+            from PIL import Image as PILImage, ImageTk
+            import io
+            doc = fitz.open(str(pdf_path))
+            page = doc[0]
+            zoom = 2.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            doc.close()
+
+            self._who_pil_img = img
+
+            for w in self.who_chart_frame.winfo_children():
+                w.destroy()
+
+            canvas = tk.Canvas(self.who_chart_frame, bg='#f0f0f0', highlightthickness=0)
+            canvas.pack(fill=tk.BOTH, expand=True)
+
+            canvas_img = ImageTk.PhotoImage(img)
+            canvas._img_ref = canvas_img
+
+            cw = max(img.width, 700)
+            ch = max(img.height, 500)
+            canvas.config(width=cw, height=ch)
+            canvas.create_image(0, 0, anchor=tk.NW, image=canvas_img)
+
+            vsb = ttk.Scrollbar(self.who_chart_frame, orient=tk.VERTICAL, command=canvas.yview)
+            hsb = ttk.Scrollbar(self.who_chart_frame, orient=tk.HORIZONTAL, command=canvas.xview)
+            canvas.config(yscrollcommand=vsb.set, xscrollcommand=hsb.set, scrollregion=(0, 0, img.width, img.height))
+            vsb.pack(side=tk.RIGHT, fill=tk.Y)
+            hsb.pack(side=tk.BOTTOM, fill=tk.X)
+
+            sexo = self.who_sexo.get()
+            rango = self.who_rango.get()
+            self.status_var.set(f"Gráfica OMS mostrada: {sexo} — {rango}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo renderizar el PDF:\n{e}")
+
+    def _who_abrir_pdf(self):
+        pdf_path = self._who_get_pdf_path()
+        if not pdf_path or not pdf_path.exists():
+            messagebox.showerror("Error", "Archivo no encontrado.")
+            return
+        import subprocess
+        try:
+            subprocess.Popen([str(pdf_path)], shell=True)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir:\n{e}")
 
     # ==================================================================
     # PESTAÑA 4: LABORATORIOS
@@ -1036,13 +1199,11 @@ class MainWindow:
             self._lab_cargar_historial()
 
     def _ant_cargar_paciente(self):
-        """Carga datos del paciente en la pestaña antropometría."""
         try:
             pid = int(self.ant_paciente_id.get().strip())
         except (ValueError, TypeError):
             messagebox.showerror("Error", "Ingrese un ID válido.")
             return
-
         paciente = self.patient_mgr.obtener_paciente(pid)
         if not paciente:
             messagebox.showerror("Error", "Paciente no encontrado.")
@@ -1084,172 +1245,207 @@ class MainWindow:
         self.status_var.set(f"Paciente {paciente['nombre']} cargado en Antropometría")
 
     def _ant_evaluar(self):
-        """Realiza la evaluación antropométrica completa."""
+        from datetime import date as date_cls
+        from src.modules.who_anthro_calc import evaluar_antropometria, formatear_resultado
+
         try:
             pid = int(self.ant_paciente_id.get().strip())
         except (ValueError, TypeError):
             messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
             return
-
         paciente = self.patient_mgr.obtener_paciente(pid)
         if not paciente:
             messagebox.showerror("Error", "Paciente no encontrado.")
             return
 
         try:
-            peso = float(self.ant_peso.get().strip())
-            talla = float(self.ant_talla.get().strip())
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
         except ValueError:
-            messagebox.showerror("Error", "Peso y talla son obligatorios.")
+            messagebox.showerror("Error", "Fecha de nacimiento inválida.")
             return
 
-        fecha_nac = date.fromisoformat(paciente['fecha_nacimiento'])
-        sexo = paciente['sexo']
+        try:
+            fecha_visita = date_cls.fromisoformat(self.ant_fecha_visita.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Fecha de visita inválida (use YYYY-MM-DD).")
+            return
 
-        pc = 0
-        if self.ant_pc.get().strip():
-            pc = float(self.ant_pc.get().strip())
+        peso = None
+        if self.ant_peso.get().strip():
+            peso = float(self.ant_peso.get().strip())
+        talla = None
+        if self.ant_talla.get().strip():
+            talla = float(self.ant_talla.get().strip())
 
-        muac = 0
-        if self.ant_muac.get().strip():
-            muac = float(self.ant_muac.get().strip())
+        if peso is None and talla is None:
+            messagebox.showerror("Error", "Ingrese al menos peso o talla.")
+            return
 
-        pliegue = 0
-        if self.ant_pliegue.get().strip():
-            pliegue = float(self.ant_pliegue.get().strip())
-
+        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
         edema = self.ant_edema.get() == "si"
 
-        peso_ant = None
-        if self.ant_peso_anterior.get().strip():
-            peso_ant = float(self.ant_peso_anterior.get().strip())
+        pc = None
+        if self.ant_pc.get().strip():
+            pc = float(self.ant_pc.get().strip())
+        muac = None
+        if self.ant_muac.get().strip():
+            muac = float(self.ant_muac.get().strip())
+        pliegue = None
+        if self.ant_pliegue.get().strip():
+            pliegue = float(self.ant_pliegue.get().strip())
+        pliegue_sub = None
+        if self.ant_pliegue_sub.get().strip():
+            pliegue_sub = float(self.ant_pliegue_sub.get().strip())
 
-        talla_ant = None
-        if self.ant_talla_anterior.get().strip():
-            talla_ant = float(self.ant_talla_anterior.get().strip())
-
-        meses_ant = None
-        if self.ant_meses_anterior.get().strip():
-            meses_ant = float(self.ant_meses_anterior.get().strip())
-
-        reporte = generar_reporte_antropometrico(
-            nombre=paciente['nombre'],
-            fecha_nac=fecha_nac,
-            sexo=sexo,
+        resultado = evaluar_antropometria(
+            sexo=paciente['sexo'],
+            fecha_nacimiento=fecha_nac,
+            fecha_visita=fecha_visita,
             peso_kg=peso,
             talla_cm=talla,
-            perimetro_cefalico_cm=pc,
+            tipo_medicion=tipo_med,
+            edema=edema,
+            pc_cm=pc,
             muac_mm=muac,
             pliegue_triceps_mm=pliegue,
-            edema=edema,
-            peso_anterior_kg=peso_ant,
-            talla_anterior_cm=talla_ant,
-            meses_eval_anterior=meses_ant,
+            pliegue_subescapular_mm=pliegue_sub,
         )
 
+        texto = formatear_resultado(resultado)
+        self.text_antropometria.config(state='normal')
         self.text_antropometria.delete("1.0", tk.END)
-        self.text_antropometria.insert("1.0", self._formatear_antropometria(reporte))
-        self.status_var.set(f"Antropometría evaluada: {reporte['clasificacion_oms']['estado_nutricional']}")
+        self.text_antropometria.insert("1.0", texto)
+        self.text_antropometria.config(state='disabled')
 
-    def _formatear_antropometria(self, r: dict) -> str:
-        cl = r['clasificacion_oms']
-        lineas = [
-            "=" * 68,
-            "   EVALUACIÓN ANTROPOMÉTRICA — TABLAS OMS",
-            "=" * 68,
-            "",
-            f"  Paciente:          {r['nombre']}",
-            f"  Edad:              {r['edad_texto']} ({r['edad_meses']} meses)",
-            f"  Sexo:              {r['sexo']}",
-            "",
-            "-" * 68,
-            "  MEDICIONES",
-            "-" * 68,
-            f"  Peso:              {r['peso_kg']} kg",
-            f"  Talla/Longitud:    {r['talla_cm']} cm",
-            f"  IMC:               {r['imc']} kg/m²",
-        ]
-        if r['perimetro_cefalico_cm'] > 0:
-            lineas.append(f"  Perímetro cefálico: {r['perimetro_cefalico_cm']} cm  →  {r['pc_clasificacion']}")
-        if r['muac_mm'] > 0:
-            lineas.append(f"  MUAC:              {r['muac_mm']} mm  →  {r['muac_clasificacion']}")
-        if r['pliegue_triceps_mm'] > 0:
-            lineas.append(f"  Pliegue triceps:   {r['pliegue_triceps_mm']} mm")
+        self.status_var.set("Evaluación antropométrica completada — WHO Anthro")
 
-        lineas += [
-            "",
-            "-" * 68,
-            "  Z-SCORES (Tabla OMS)",
-            "-" * 68,
-            f"  Peso/Edad:         {r['z_peso_edad']:+.2f}  →  {cl['estado_nutricional']}",
-            f"  Talla/Edad:        {r['z_talla_edad']:+.2f}  →  {cl['talla_edad']}",
-            f"  IMC/Edad:          {r['z_imc_edad']:+.2f}  →  {cl['imc_edad']}",
-            "",
-            "-" * 68,
-            "  PESO COMO PORCENTAJE",
-            "-" * 68,
-            f"  % Peso esperado:   {r['peso_porcentaje']}%",
-            f"  % Peso para talla: {r['peso_talla_porcentaje']}%",
-            "",
-            "-" * 68,
-            "  CLASIFICACIÓN WELLCOME (peso + edema)",
-            "-" * 68,
-            f"  →  {r['clasificacion_wellcome']}",
-        ]
+    def _ant_ubicar_grafica(self):
+        """Abre ventana con gráfica OMS y punto del paciente ubicado."""
+        from datetime import date as date_cls
+        from src.modules.who_anthro_calc import evaluar_antropometria
+        from src.modules.who_growth_charts import generar_grafica_longitudaltura
 
-        if r['tasa_peso_semanal']:
-            lineas += [
-                "",
-                "-" * 68,
-                "  TASAS DE CRECIMIENTO ESPERADAS",
-                "-" * 68,
-                f"  Ganancia peso semanal esperada: {r['tasa_peso_semanal']} g/sem",
-                "  Longitud primer año: +25 cm | Segundo año: +12 cm",
-                "  Perímetro cefálico: +1 cm/mes (1er año) | +2 cm (2do año)",
-            ]
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
 
-        if r['alertas']:
-            lineas += [
-                "",
-                "=" * 68,
-                "  ⚠  ALERTAS / CRITERIOS DE INTERVENCIÓN",
-                "=" * 68,
-            ]
-            for a in r['alertas']:
-                lineas.append(f"  • {a}")
+        talla = None
+        if self.ant_talla.get().strip():
+            talla = float(self.ant_talla.get().strip())
+        if talla is None:
+            messagebox.showerror("Error", "Ingrese talla/longitud para ubicar en gráfica.")
+            return
 
-        lineas += [
-            "",
-            "-" * 68,
-            "  REFERENCIA: Tabla 1 — Criterios de desnutrición OMS",
-            "-" * 68,
-            "  IMC > 30 = Obeso | > 25 = Sobrepeso",
-            "  Talla edad < 85% = Desnutrición | < 90% = Riesgo",
-            "  Peso/talla < 70% = Severa | 70-80% = Moderada",
-            "  Peso/talla 80-90% = Leve | 90-100% = Normal",
-            "",
-            "-" * 68,
-            "  REFERENCIA: Tabla 2 — Clasificación Wellcome",
-            "-" * 68,
-            "  Marasmo: < 60% peso sin edema",
-            "  Marasmic-Kwashiorkor: < 60% peso con edema",
-            "  Kwashiorkor: 60-80% peso con edema",
-            "  Desnutrición moderada: 60-80% peso sin edema",
-            "=" * 68,
-        ]
-        return "\n".join(lineas)
+        peso = None
+        if self.ant_peso.get().strip():
+            peso = float(self.ant_peso.get().strip())
+
+        try:
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            fecha_visita = date_cls.fromisoformat(self.ant_fecha_visita.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Fechas inválidas.")
+            return
+
+        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
+        edema = self.ant_edema.get() == "si"
+
+        pc = None
+        if self.ant_pc.get().strip():
+            pc = float(self.ant_pc.get().strip())
+        muac = None
+        if self.ant_muac.get().strip():
+            muac = float(self.ant_muac.get().strip())
+        pliegue = None
+        if self.ant_pliegue.get().strip():
+            pliegue = float(self.ant_pliegue.get().strip())
+        pliegue_sub = None
+        if self.ant_pliegue_sub.get().strip():
+            pliegue_sub = float(self.ant_pliegue_sub.get().strip())
+
+        resultado = evaluar_antropometria(
+            sexo=paciente['sexo'],
+            fecha_nacimiento=fecha_nac,
+            fecha_visita=fecha_visita,
+            peso_kg=peso,
+            talla_cm=talla,
+            tipo_medicion=tipo_med,
+            edema=edema,
+            pc_cm=pc,
+            muac_mm=muac,
+            pliegue_triceps_mm=pliegue,
+            pliegue_subescapular_mm=pliegue_sub,
+        )
+
+        if resultado['errores']:
+            messagebox.showerror("Error", "\n".join(resultado['errores']))
+            return
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Gráfica OMS — Ubicación del Paciente")
+        ventana.geometry("900x600")
+        ventana.transient(self.root)
+
+        info_frame = ttk.Frame(ventana)
+        info_frame.pack(fill=tk.X, padx=10, pady=5)
+        sexo_txt = "Niño" if paciente['sexo'] == 'M' else "Niña"
+        info = f"{paciente['nombre']} | {sexo_txt} | {resultado['edad_meses_completos']} meses | Talla: {talla} cm"
+        if peso:
+            info += f" | Peso: {peso} kg"
+        ttk.Label(info_frame, text=info, font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
+
+        chart_frame = ttk.Frame(ventana)
+        chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        chart = generar_grafica_longitudaltura(
+            chart_frame, paciente['sexo'],
+            resultado['edad_meses_decimal'],
+            talla, paciente['nombre']
+        )
+        chart.pack(fill=tk.BOTH, expand=True)
+
+        res_frame = ttk.LabelFrame(ventana, text=" Z-Scores ", padding=5)
+        res_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        z_lineas = []
+        for nombre, z_val in [
+            ("L/Alt-edad", resultado['z_lhfa']),
+            ("Peso-edad", resultado['z_wfa']),
+            ("Peso-L/Alt", resultado['z_wflh']),
+            ("IMC-edad", resultado['z_bmi']),
+        ]:
+            if z_val is not None:
+                z_lineas.append(f"{nombre}: {z_val:+.2f}")
+        if resultado['z_acfa'] is not None:
+            z_lineas.append(f"MUAC-edad: {resultado['z_acfa']:+.2f}")
+
+        ttk.Label(res_frame, text="  |  ".join(z_lineas), font=('Consolas', 10)).pack(anchor=tk.W, padx=5)
+
+        self.status_var.set(
+            f"Paciente ubicado en gráfica — Z L/Alt: {resultado['z_lhfa']:+.2f}" if resultado['z_lhfa'] else "Paciente ubicado en gráfica"
+        )
 
     def _ant_limpiar(self):
         for e in [self.ant_paciente_id, self.ant_peso, self.ant_talla, self.ant_pc,
-                  self.ant_muac, self.ant_pliegue, self.ant_peso_anterior,
-                  self.ant_talla_anterior, self.ant_meses_anterior]:
+                  self.ant_muac, self.ant_pliegue, self.ant_pliegue_sub]:
             e.delete(0, tk.END)
-        self.ant_edema.set("no")
         for w in [self.ant_nombre, self.ant_fecha_nac, self.ant_sexo, self.ant_edad]:
             w.config(state='normal')
             w.delete(0, tk.END)
             w.config(state='readonly')
+        self.ant_edema.set("no")
+        self.ant_tipo_med.set("Decúbito (L)")
+        self.ant_fecha_visita.delete(0, tk.END)
+        self.ant_fecha_visita.insert(0, date.today().isoformat())
+        self.text_antropometria.config(state='normal')
         self.text_antropometria.delete("1.0", tk.END)
+        self.text_antropometria.config(state='disabled')
 
     # ==================================================================
     # MÉTODOS: PACIENTES
