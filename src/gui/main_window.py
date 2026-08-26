@@ -1328,10 +1328,9 @@ class MainWindow:
         t.config(state=tk.DISABLED)
 
     def _ant_ubicar_grafica(self):
-        """Abre ventana con gráfica OMS y punto del paciente ubicado."""
         from datetime import date as date_cls
         from src.modules.who_anthro_calc import evaluar_antropometria
-        from src.modules.who_growth_charts import generar_grafica_longitudaltura
+        from src.modules.who_growth_charts import CHART_MAP
 
         try:
             pid = int(self.ant_paciente_id.get().strip())
@@ -1349,8 +1348,25 @@ class MainWindow:
             messagebox.showerror("Error", "Los valores deben ser numéricos.")
             return
 
-        if talla is None:
-            messagebox.showerror("Error", "Ingrese talla/longitud para ubicar en gráfica.")
+        indicador = self.ant_indicador_var.get()
+
+        if indicador in ("lhfa", "wflh", "bmi") and talla is None:
+            messagebox.showerror("Error", f"Ingrese talla/longitud para graficar {self.INDICADOR_NOMBRES.get(indicador, indicador)}.")
+            return
+        if indicador == "wfa" and peso is None:
+            messagebox.showerror("Error", "Ingrese peso para graficar Peso-Edad.")
+            return
+        if indicador == "hcfa" and pc is None:
+            messagebox.showerror("Error", "Ingrese perímetro cefálico para graficar PC-Edad.")
+            return
+        if indicador == "acfa" and muac is None:
+            messagebox.showerror("Error", "Ingrese MUAC para graficar MUAC-Edad.")
+            return
+        if indicador == "tsfa" and pliegue is None:
+            messagebox.showerror("Error", "Ingrese pliegue tríceps para graficar.")
+            return
+        if indicador == "ssfa" and pliegue_sub is None:
+            messagebox.showerror("Error", "Ingrese pliegue subescapular para graficar.")
             return
 
         try:
@@ -1378,48 +1394,103 @@ class MainWindow:
             messagebox.showerror("Error", "\n".join(resultado['errores']))
             return
 
+        chart_func = CHART_MAP.get(indicador)
+        if chart_func is None:
+            messagebox.showerror("Error", f"No hay gráfica disponible para {self.INDICADOR_NOMBRES.get(indicador, indicador)}.")
+            return
+
         ventana = tk.Toplevel(self.root)
-        ventana.title("Gráfica OMS — Ubicación del Paciente")
-        ventana.geometry("900x600")
+        ventana.title(f"Gráfica OMS — {self.INDICADOR_NOMBRES.get(indicador, indicador)}")
+        ventana.geometry("920x680")
         ventana.transient(self.root)
 
         info_frame = ttk.Frame(ventana)
         info_frame.pack(fill=tk.X, padx=10, pady=5)
         sexo_txt = "Niño" if paciente['sexo'] == 'M' else "Niña"
-        info = f"{paciente['nombre']} | {sexo_txt} | {resultado['edad_meses_completos']} meses | Talla: {talla} cm"
+        info = f"{paciente['nombre']} | {sexo_txt} | {resultado['edad_meses_completos']} meses"
         if peso:
             info += f" | Peso: {peso} kg"
+        if talla:
+            info += f" | Talla: {talla} cm"
+        if pc:
+            info += f" | PC: {pc} cm"
+        if muac:
+            info += f" | MUAC: {muac} mm"
         ttk.Label(info_frame, text=info, font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
+
+        mode_var = tk.StringVar(value="zscore")
+        mode_frame = ttk.Frame(ventana)
+        mode_frame.pack(fill=tk.X, padx=10, pady=2)
+        ttk.Label(mode_frame, text="Modo:").pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(mode_frame, text="Z-Scores (SD)", variable=mode_var, value="zscore",
+                       bg=COLOR_BG, font=('Segoe UI', 10)).pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(mode_frame, text="Percentiles (P3-P97)", variable=mode_var, value="percentil",
+                       bg=COLOR_BG, font=('Segoe UI', 10)).pack(side=tk.LEFT, padx=5)
 
         chart_frame = ttk.Frame(ventana)
         chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        chart = generar_grafica_longitudaltura(
-            chart_frame, paciente['sexo'],
-            resultado['edad_meses_decimal'],
-            talla, paciente['nombre']
-        )
-        chart.pack(fill=tk.BOTH, expand=True)
+        def refrescar_grafica(*args):
+            for w in chart_frame.winfo_children():
+                w.destroy()
+            modo = mode_var.get()
+            kwargs = {"modo": modo}
+            if indicador == "lhfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], talla,
+                                   paciente['nombre'], **kwargs)
+            elif indicador == "wfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], peso,
+                                   paciente['nombre'], **kwargs)
+            elif indicador == "wflh":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   talla, peso, paciente['nombre'],
+                                   tipo_med=tipo_med, **kwargs)
+            elif indicador == "bmi":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'],
+                                   resultado['imc'] or 0, paciente['nombre'], **kwargs)
+            elif indicador == "hcfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], pc,
+                                   paciente['nombre'], **kwargs)
+            elif indicador == "acfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], muac,
+                                   paciente['nombre'], **kwargs)
+            elif indicador == "tsfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], pliegue,
+                                   paciente['nombre'], **kwargs)
+            elif indicador == "ssfa":
+                chart = chart_func(chart_frame, paciente['sexo'],
+                                   resultado['edad_meses_decimal'], pliegue_sub,
+                                   paciente['nombre'], **kwargs)
+            chart.pack(fill=tk.BOTH, expand=True)
+
+        mode_var.trace_add("write", refrescar_grafica)
+        refrescar_grafica()
 
         res_frame = ttk.LabelFrame(ventana, text=" Z-Scores ", padding=5)
         res_frame.pack(fill=tk.X, padx=10, pady=5)
 
         z_lineas = []
-        for nombre, z_val in [
+        for z_name, z_val in [
             ("L/Alt-edad", resultado['z_lhfa']),
             ("Peso-edad", resultado['z_wfa']),
             ("Peso-L/Alt", resultado['z_wflh']),
             ("IMC-edad", resultado['z_bmi']),
+            ("PC-edad", resultado['z_pc']),
+            ("MUAC-edad", resultado['z_acfa']),
         ]:
             if z_val is not None:
-                z_lineas.append(f"{nombre}: {z_val:+.2f}")
-        if resultado['z_acfa'] is not None:
-            z_lineas.append(f"MUAC-edad: {resultado['z_acfa']:+.2f}")
+                z_lineas.append(f"{z_name}: {z_val:+.2f}")
 
         ttk.Label(res_frame, text="  |  ".join(z_lineas), font=('Consolas', 10)).pack(anchor=tk.W, padx=5)
 
         self.status_var.set(
-            f"Paciente ubicado en gráfica — Z L/Alt: {resultado['z_lhfa']:+.2f}" if resultado['z_lhfa'] else "Paciente ubicado en gráfica"
+            f"Gráfica {self.INDICADOR_NOMBRES.get(indicador, indicador)} — {paciente['nombre']}"
         )
 
     def _ant_limpiar(self):
