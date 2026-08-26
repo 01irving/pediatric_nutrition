@@ -1119,6 +1119,29 @@ class MainWindow:
 
         self.status_var.set(f"Paciente {paciente['nombre']} cargado en Antropometría")
 
+    def _ant_leer_campos(self):
+        peso = None
+        if self.ant_peso.get().strip():
+            peso = float(self.ant_peso.get().strip())
+        talla = None
+        if self.ant_talla.get().strip():
+            talla = float(self.ant_talla.get().strip())
+        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
+        edema = self.ant_edema.get() == "si"
+        pc = None
+        if self.ant_pc.get().strip():
+            pc = float(self.ant_pc.get().strip())
+        muac = None
+        if self.ant_muac.get().strip():
+            muac = float(self.ant_muac.get().strip())
+        pliegue = None
+        if self.ant_pliegue.get().strip():
+            pliegue = float(self.ant_pliegue.get().strip())
+        pliegue_sub = None
+        if self.ant_pliegue_sub.get().strip():
+            pliegue_sub = float(self.ant_pliegue_sub.get().strip())
+        return peso, talla, tipo_med, edema, pc, muac, pliegue, pliegue_sub
+
     def _ant_evaluar(self):
         from datetime import date as date_cls
         from src.modules.who_anthro_calc import evaluar_antropometria
@@ -1145,32 +1168,15 @@ class MainWindow:
             messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
             return
 
-        peso = None
-        if self.ant_peso.get().strip():
-            peso = float(self.ant_peso.get().strip())
-        talla = None
-        if self.ant_talla.get().strip():
-            talla = float(self.ant_talla.get().strip())
+        try:
+            peso, talla, tipo_med, edema, pc, muac, pliegue, pliegue_sub = self._ant_leer_campos()
+        except ValueError:
+            messagebox.showerror("Error", "Los valores deben ser numéricos.")
+            return
 
         if peso is None and talla is None:
             messagebox.showerror("Error", "Ingrese al menos peso o talla.")
             return
-
-        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
-        edema = self.ant_edema.get() == "si"
-
-        pc = None
-        if self.ant_pc.get().strip():
-            pc = float(self.ant_pc.get().strip())
-        muac = None
-        if self.ant_muac.get().strip():
-            muac = float(self.ant_muac.get().strip())
-        pliegue = None
-        if self.ant_pliegue.get().strip():
-            pliegue = float(self.ant_pliegue.get().strip())
-        pliegue_sub = None
-        if self.ant_pliegue_sub.get().strip():
-            pliegue_sub = float(self.ant_pliegue_sub.get().strip())
 
         resultado = evaluar_antropometria(
             sexo=paciente['sexo'],
@@ -1185,6 +1191,10 @@ class MainWindow:
             pliegue_triceps_mm=pliegue,
             pliegue_subescapular_mm=pliegue_sub,
         )
+
+        if resultado['errores']:
+            messagebox.showerror("Error", "\n".join(resultado['errores']))
+            return
 
         self._resultado_actual = resultado
         self._ant_mostrar_indicador()
@@ -1333,16 +1343,15 @@ class MainWindow:
             messagebox.showerror("Error", "Paciente no encontrado.")
             return
 
-        talla = None
-        if self.ant_talla.get().strip():
-            talla = float(self.ant_talla.get().strip())
+        try:
+            peso, talla, tipo_med, edema, pc, muac, pliegue, pliegue_sub = self._ant_leer_campos()
+        except ValueError:
+            messagebox.showerror("Error", "Los valores deben ser numéricos.")
+            return
+
         if talla is None:
             messagebox.showerror("Error", "Ingrese talla/longitud para ubicar en gráfica.")
             return
-
-        peso = None
-        if self.ant_peso.get().strip():
-            peso = float(self.ant_peso.get().strip())
 
         try:
             fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
@@ -1350,22 +1359,6 @@ class MainWindow:
         except ValueError:
             messagebox.showerror("Error", "Fechas inválidas.")
             return
-
-        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
-        edema = self.ant_edema.get() == "si"
-
-        pc = None
-        if self.ant_pc.get().strip():
-            pc = float(self.ant_pc.get().strip())
-        muac = None
-        if self.ant_muac.get().strip():
-            muac = float(self.ant_muac.get().strip())
-        pliegue = None
-        if self.ant_pliegue.get().strip():
-            pliegue = float(self.ant_pliegue.get().strip())
-        pliegue_sub = None
-        if self.ant_pliegue_sub.get().strip():
-            pliegue_sub = float(self.ant_pliegue_sub.get().strip())
 
         resultado = evaluar_antropometria(
             sexo=paciente['sexo'],
