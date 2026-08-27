@@ -1287,12 +1287,24 @@ class MainWindow:
         t.insert("1.0", f"\n  {nombre}\n")
         t.insert(tk.END, f"\n  {'=' * 48}\n")
 
-        med_val = (r.get('talla_original_cm') or r.get('peso_kg') or
-                   r.get('pc_cm') or r.get('muac_mm') or '')
-        if codigo == "tsfa" and r.get('pliegue_triceps_mm'):
-            med_val = f"{r['pliegue_triceps_mm']} mm"
-        elif codigo == "ssfa" and r.get('pliegue_subescapular_mm'):
-            med_val = f"{r['pliegue_subescapular_mm']} mm"
+        if codigo == "lhfa":
+            med_val = f"{r.get('talla_cm', r.get('talla_original_cm', ''))} cm"
+        elif codigo == "wfa":
+            med_val = f"{r.get('peso_kg', '')} kg"
+        elif codigo == "wflh":
+            med_val = f"{r.get('peso_kg', '')} kg / {r.get('talla_cm', r.get('talla_original_cm', ''))} cm"
+        elif codigo == "bmi":
+            med_val = f"{r.get('imc', '')} kg/m²"
+        elif codigo == "hcfa":
+            med_val = f"{r.get('pc_cm', '')} cm"
+        elif codigo == "acfa":
+            med_val = f"{r.get('muac_mm', '')} mm"
+        elif codigo == "tsfa":
+            med_val = f"{r.get('pliegue_triceps_mm', '')} mm"
+        elif codigo == "ssfa":
+            med_val = f"{r.get('pliegue_subescapular_mm', '')} mm"
+        else:
+            med_val = ""
         t.insert(tk.END, f"\n  Valor medido:   {med_val}\n")
 
         if z_val is not None:
