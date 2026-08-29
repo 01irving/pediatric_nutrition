@@ -17,6 +17,17 @@ from src.modules.nutrition_calcs import (
 )
 
 
+def test_pc_edad_z_anthro():
+    """Verifica Z de perímetro cefálico contra referencia WHO Anthro (caso -0.75)."""
+    from src.modules.who_anthro_calc import evaluar_antropometria
+    r = evaluar_antropometria(
+        sexo='M', fecha_nacimiento=date(2026, 5, 20), fecha_visita=date(2026, 8, 29),
+        pc_cm=40,
+    )
+    assert r['edad_dias'] == 101
+    assert r['z_pc'] == -0.75
+
+
 def test_edad_meses():
     nac = date(2024, 1, 1)
     eval_ = date(2025, 1, 1)
