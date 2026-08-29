@@ -16,7 +16,6 @@ from src.modules.patient_manager import PatientManager
 from src.modules.historia_alimentaria_manager import HistoriaAlimentariaManager
 from src.modules.historia_medica_manager import HistoriaMedicaManager
 from src.modules.laboratorio_manager import LaboratorioManager
-from src.modules.seguimiento_manager import SeguimientoManager
 from src.modules.laboratorio_data import (
     listar_pruebas, obtener_prueba, clasificar_resultado,
     unidades_disponibles, convertir_a_base
@@ -102,7 +101,6 @@ class MainWindow:
         self.historia_mgr = HistoriaAlimentariaManager(self.db)
         self.historia_med_mgr = HistoriaMedicaManager(self.db)
         self.laboratorio_mgr = LaboratorioManager(self.db)
-        self.seguimiento_mgr = SeguimientoManager(self.db)
         from src.modules.antropometria_manager import AntropometriaManager
         self.antropometria_mgr = AntropometriaManager(self.db)
 
@@ -116,7 +114,6 @@ class MainWindow:
         self.ha_editando_id: Optional[int] = None
         self.hm_editando_id: Optional[int] = None
         self.lab_editando_id: Optional[int] = None
-        self.seg_editando_id: Optional[int] = None
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _configurar_estilo(self):
@@ -172,19 +169,37 @@ class MainWindow:
         self._crear_pestana_historia_alimentaria()
         self._crear_pestana_antropometria()
         self._crear_pestana_laboratorios()
-        self._crear_pestana_seguimiento()
+        self._bloquear_pestanas()
+
+    def _bloquear_pestanas(self):
+        """Deshabilita las pestañas de captura hasta seleccionar un paciente."""
+        self.pestanas_entrada = []
+        for tid in self.notebook.tabs():
+            texto = self.notebook.tab(tid, "text")
+            if "Pacientes" not in texto:
+                self.notebook.tab(tid, state='disabled')
+                self.pestanas_entrada.append(tid)
+
+    def _habilitar_pestanas(self):
+        """Habilita todas las pestañas de captura tras seleccionar un paciente."""
+        for tid in self.pestanas_entrada:
+            self.notebook.tab(tid, state='normal')
 
     # ==================================================================
     # PESTAÑA 1: PACIENTES
     # ==================================================================
     def _crear_pestana_pacientes(self):
-        frame = ttk.Frame(self.notebook, padding=10)
+        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
         self.notebook.add(frame, text="  Pacientes  ")
-        ttk.Label(frame, text="Gestión de Pacientes", style='Title.TLabel').pack(anchor=tk.W)
-        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+        parent = frame.inner
 
-        form_frame = ttk.LabelFrame(frame, text=" Datos del Paciente ", padding=10)
-        form_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(parent, text="Gestión de Pacientes", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Administre pacientes y su seguimiento de crecimiento. Seleccione un paciente para habilitar las demás pestañas.",
+                  style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        form_frame = ttk.LabelFrame(parent, text=" Datos del Paciente ", padding=10)
+        form_frame.pack(fill=tk.X, padx=10, pady=5)
 
         row1 = ttk.Frame(form_frame)
         row1.pack(fill=tk.X, pady=2)
@@ -217,11 +232,11 @@ class MainWindow:
         ttk.Button(btn_frame, text="Nuevo", command=self._limpiar_formulario).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Eliminar", command=self._eliminar_paciente).pack(side=tk.LEFT, padx=5)
 
-        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
-        ttk.Label(frame, text="Lista de Pacientes", style='Subtitle.TLabel').pack(anchor=tk.W)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+        ttk.Label(parent, text="Lista de Pacientes", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
 
-        search_frame = ttk.Frame(frame)
-        search_frame.pack(fill=tk.X, pady=5)
+        search_frame = ttk.Frame(parent)
+        search_frame.pack(fill=tk.X, pady=5, padx=5)
         ttk.Label(search_frame, text="Buscar:").pack(side=tk.LEFT)
         self.entry_buscar = ttk.Entry(search_frame, width=30)
         self.entry_buscar.pack(side=tk.LEFT, padx=5)
@@ -229,17 +244,18 @@ class MainWindow:
         ttk.Button(search_frame, text="Todos", command=self._cargar_pacientes).pack(side=tk.LEFT, padx=5)
 
         cols = ("ID", "Nombre completo", "Nacimiento", "Sexo", "Peso", "Talla")
-        self.tree_pacientes = ttk.Treeview(frame, columns=cols, show='headings', height=8)
+        self.tree_pacientes = ttk.Treeview(parent, columns=cols, show='headings', height=7)
         for c in cols:
             self.tree_pacientes.heading(c, text=c)
             self.tree_pacientes.column(c, width=140, anchor=tk.CENTER)
         self.tree_pacientes.column("ID", width=50)
         self.tree_pacientes.column("Nombre completo", width=250, anchor=tk.W)
-        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.tree_pacientes.yview)
+        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.tree_pacientes.yview)
         self.tree_pacientes.configure(yscrollcommand=scrollbar.set)
-        self.tree_pacientes.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        self.tree_pacientes.pack(fill=tk.X, side=tk.LEFT, padx=5)
         scrollbar.pack(fill=tk.Y, side=tk.RIGHT)
         self.tree_pacientes.bind("<<TreeviewSelect>>", self._seleccionar_paciente)
+
         self._cargar_pacientes()
 
     # ==================================================================
@@ -268,97 +284,6 @@ class MainWindow:
         result_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         self.text_evaluacion = scrolledtext.ScrolledText(result_frame, height=18, font=('Consolas', 10), bg=COLOR_WHITE)
         self.text_evaluacion.pack(fill=tk.BOTH, expand=True)
-
-    # ==================================================================
-    # PESTAÑA 3: SEGUIMIENTO
-    # ==================================================================
-    def _crear_pestana_seguimiento(self):
-        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
-        self.notebook.add(frame, text="  Seguimiento  ")
-        parent = frame.inner
-
-        ttk.Label(parent, text="Seguimiento de Crecimiento", style='Title.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Label(parent, text="Historial evolutivo por paciente (peso, talla, IMC, perímetros)", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
-
-        # --- Datos del Paciente ---
-        hdr = ttk.LabelFrame(parent, text=" Paciente ", padding=8)
-        hdr.pack(fill=tk.X, padx=10, pady=5)
-        r0 = ttk.Frame(hdr)
-        r0.pack(fill=tk.X, pady=2)
-        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
-        self.seg_paciente_id = ttk.Entry(r0, width=10)
-        self.seg_paciente_id.pack(side=tk.LEFT, padx=5)
-        ttk.Button(r0, text="Cargar Paciente", command=self._seg_cargar_paciente).pack(side=tk.LEFT, padx=5)
-        self.seg_paciente_id.bind("<Return>", lambda e: self._seg_cargar_paciente())
-        ttk.Label(r0, text="Nombre:").pack(side=tk.LEFT, padx=(20, 5))
-        self.seg_nombre = ttk.Entry(r0, width=28, state='readonly')
-        self.seg_nombre.pack(side=tk.LEFT, padx=5)
-
-        # --- Formulario de registro ---
-        form = ttk.LabelFrame(parent, text=" Nuevo Registro de Seguimiento ", padding=8)
-        form.pack(fill=tk.X, padx=10, pady=5)
-
-        rf = ttk.Frame(form)
-        rf.pack(fill=tk.X, pady=2)
-        ttk.Label(rf, text="Fecha visita (DD-MM-AAAA):").pack(side=tk.LEFT, padx=5)
-        self.seg_fecha = ttk.Entry(rf, width=15)
-        self.seg_fecha.insert(0, date.today().strftime("%d-%m-%Y"))
-        self.seg_fecha.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rf, text="Peso (kg):").pack(side=tk.LEFT, padx=5)
-        self.seg_peso = ttk.Entry(rf, width=10)
-        self.seg_peso.pack(side=tk.LEFT, padx=5)
-        ttk.Label(rf, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
-        self.seg_talla = ttk.Entry(rf, width=10)
-        self.seg_talla.pack(side=tk.LEFT, padx=5)
-
-        r2 = ttk.Frame(form)
-        r2.pack(fill=tk.X, pady=2)
-        ttk.Label(r2, text="Tipo de medición:").pack(side=tk.LEFT, padx=5)
-        self.seg_tipo_med = ttk.Combobox(r2, values=["Decúbito (L)", "Bipedestación (H)"], width=18, state="readonly")
-        self.seg_tipo_med.pack(side=tk.LEFT, padx=5)
-        self.seg_tipo_med.set("Decúbito (L)")
-        ttk.Label(r2, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
-        self.seg_pc = ttk.Entry(r2, width=10)
-        self.seg_pc.pack(side=tk.LEFT, padx=5)
-        ttk.Label(r2, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
-        self.seg_muac = ttk.Entry(r2, width=10)
-        self.seg_muac.pack(side=tk.LEFT, padx=5)
-
-        r3 = ttk.Frame(form)
-        r3.pack(fill=tk.X, pady=2)
-        ttk.Label(r3, text="Observaciones:").pack(side=tk.LEFT, padx=5)
-        self.seg_obs = ttk.Entry(r3, width=80)
-        self.seg_obs.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
-        btn = ttk.Frame(parent)
-        btn.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Button(btn, text="Guardar / Actualizar", style='Primary.TButton',
-                   command=self._seg_guardar).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn, text="Seleccionar / Editar", command=self._seg_seleccionar_a_editar).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn, text="Eliminar Seleccionado", command=self._seg_eliminar_seleccionado).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn, text="Cancelar Edición", command=self._seg_cancelar_edicion).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn, text="Ver Gráfica de Evolución", command=self._seg_ver_grafica).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn, text="Limpiar", command=self._seg_limpiar).pack(side=tk.LEFT, padx=5)
-
-        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
-
-        hist = ttk.LabelFrame(parent, text=" Historial de Crecimiento ", padding=8)
-        hist.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        cols = ("ID", "Fecha", "Peso (kg)", "Talla (cm)", "IMC",
-                "Per. Cefálico", "MUAC", "Observaciones")
-        self.tree_seguimiento = ttk.Treeview(hist, columns=cols, show='headings', height=10)
-        for c in cols:
-            self.tree_seguimiento.heading(c, text=c)
-            self.tree_seguimiento.column(c, width=110, anchor=tk.CENTER)
-        self.tree_seguimiento.column("ID", width=50)
-        self.tree_seguimiento.column("IMC", width=70)
-        self.tree_seguimiento.column("Observaciones", width=250, anchor=tk.W)
-        tree_scroll = ttk.Scrollbar(hist, orient=tk.VERTICAL, command=self.tree_seguimiento.yview)
-        self.tree_seguimiento.configure(yscrollcommand=tree_scroll.set)
-        self.tree_seguimiento.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        tree_scroll.pack(fill=tk.Y, side=tk.RIGHT)
 
     # ==================================================================
     # PESTAÑA 4: REQUERIMIENTOS
@@ -1990,6 +1915,7 @@ class MainWindow:
         if sel:
             vals = self.tree_pacientes.item(sel[0], 'values')
             self.paciente_seleccionado = int(vals[0])
+            self._habilitar_pestanas()
             self._llenar_historia_desde_paciente(self.paciente_seleccionado)
 
     def _llenar_historia_desde_paciente(self, paciente_id: int):
@@ -2045,6 +1971,16 @@ class MainWindow:
         self.hm_nombre.delete(0, tk.END)
         self.hm_nombre.insert(0, paciente['nombre'])
         self.hm_nombre.config(state='readonly')
+
+        # Llena Antropometría
+        self.ant_paciente_id.delete(0, tk.END)
+        self.ant_paciente_id.insert(0, str(paciente_id))
+        self._ant_cargar_paciente()
+
+        # Llena Laboratorios
+        self.lab_paciente_id.delete(0, tk.END)
+        self.lab_paciente_id.insert(0, str(paciente_id))
+        self._lab_cargar_paciente()
 
         self.status_var.set(f"Paciente {paciente['nombre']} cargado en todas las pestañas")
 
@@ -2125,291 +2061,6 @@ class MainWindow:
             f"  Zinc:          {req['zinc_mg']} mg\n" +
             "=" * 60
         )
-
-    # ==================================================================
-    # MÉTODOS: SEGUIMIENTO
-    # ==================================================================
-    def _seg_leer_pid(self):
-        try:
-            return int(self.seg_paciente_id.get().strip())
-        except (ValueError, TypeError):
-            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
-            return None
-
-    def _seg_cargar_paciente(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        paciente = self.patient_mgr.obtener_paciente(pid)
-        if not paciente:
-            messagebox.showerror("Error", "Paciente no encontrado.")
-            return
-        self.seg_nombre.config(state='normal')
-        self.seg_nombre.delete(0, tk.END)
-        self.seg_nombre.insert(0, paciente['nombre'])
-        self.seg_nombre.config(state='readonly')
-        self._seg_cargar_historial()
-        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Seguimiento")
-
-    def _seg_cargar_historial(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        for item in self.tree_seguimiento.get_children():
-            self.tree_seguimiento.delete(item)
-        registros = self.seguimiento_mgr.listar_por_paciente(pid)
-        for r in registros:
-            self.tree_seguimiento.insert("", tk.END, values=(
-                r['id'], _mostrar_fecha(r['fecha_visita']),
-                r.get('peso_kg', ''), r.get('talla_cm', ''),
-                r.get('imc', ''), r.get('pc_cm', ''),
-                r.get('muac_mm', ''), r.get('observaciones', '')
-            ))
-        self.status_var.set(f"{len(registros)} registro(s) de seguimiento")
-
-    def _seg_leer_valores(self):
-        peso = None
-        talla = None
-        pc = None
-        muac = None
-        try:
-            if self.seg_peso.get().strip():
-                peso = float(self.seg_peso.get().strip())
-            if self.seg_talla.get().strip():
-                talla = float(self.seg_talla.get().strip())
-            if self.seg_pc.get().strip():
-                pc = float(self.seg_pc.get().strip())
-            if self.seg_muac.get().strip():
-                muac = float(self.seg_muac.get().strip())
-        except ValueError:
-            messagebox.showerror("Error", "Ingrese valores numéricos válidos (coma o punto).")
-            return None
-        return peso, talla, pc, muac
-
-    def _seg_guardar(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        paciente = self.patient_mgr.obtener_paciente(pid)
-        if not paciente:
-            messagebox.showerror("Error", "Paciente no encontrado.")
-            return
-        try:
-            fecha_visita = _parsear_fecha(self.seg_fecha.get())
-        except ValueError:
-            messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
-            return
-        vals = self._seg_leer_valores()
-        if vals is None:
-            return
-        peso, talla, pc, muac = vals
-        tipo_med = "L" if "Dec" in self.seg_tipo_med.get() else "H"
-        obs = self.seg_obs.get().strip()
-
-        from datetime import date as date_cls
-        edad_meses = None
-        try:
-            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
-            edad_meses = (fecha_visita - fecha_nac).days / 30.4375
-        except (ValueError, TypeError):
-            pass
-
-        if self.seg_editando_id is not None:
-            self.seguimiento_mgr.actualizar(
-                self.seg_editando_id, fecha_visita, peso, talla, tipo_med,
-                pc, muac, obs, edad_meses)
-            self.status_var.set(f"Registro de seguimiento actualizado (ID: {self.seg_editando_id})")
-            messagebox.showinfo("Éxito", "Registro de seguimiento actualizado correctamente.")
-            self.seg_editando_id = None
-        else:
-            sid = self.seguimiento_mgr.guardar(
-                pid, fecha_visita, peso, talla, tipo_med, pc, muac, obs, edad_meses)
-            self.status_var.set(f"Registro de seguimiento guardado (ID: {sid})")
-            messagebox.showinfo("Éxito", f"Registro de seguimiento guardado.\nID: {sid}")
-        self._seg_cargar_historial()
-
-    def _seg_seleccionar_a_editar(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        registros = self.seguimiento_mgr.listar_por_paciente(pid)
-        if not registros:
-            messagebox.showinfo("Sin registros", "No hay registros de seguimiento para este paciente.")
-            return
-        ventana = tk.Toplevel(self.root)
-        ventana.title(f"Seleccionar registro de seguimiento — Paciente {pid}")
-        ventana.geometry("760x400")
-        tree = ttk.Treeview(ventana, columns=("id", "fecha", "peso", "talla", "imc"),
-                            show='headings', height=12)
-        for c, w in (("id", 60), ("fecha", 130), ("peso", 100), ("talla", 100), ("imc", 80)):
-            tree.heading(c, text=c.capitalize())
-            tree.column(c, width=w, anchor=tk.CENTER)
-        tree.heading("id", text="ID")
-        tree.heading("fecha", text="Fecha")
-        tree.heading("peso", text="Peso (kg)")
-        tree.heading("talla", text="Talla (cm)")
-        tree.heading("imc", text="IMC")
-        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        for r in registros:
-            tree.insert("", tk.END, values=(
-                r['id'], _mostrar_fecha(r['fecha_visita']),
-                r.get('peso_kg', ''), r.get('talla_cm', ''), r.get('imc', '')))
-
-        def _editar():
-            sel = tree.selection()
-            if not sel:
-                messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
-                return
-            sid = int(tree.item(sel[0], "values")[0])
-            registro = self.seguimiento_mgr.obtener(sid)
-            ventana.destroy()
-            if not registro:
-                messagebox.showerror("Error", "Registro no encontrado.")
-                return
-            self._seg_llenar_formulario(registro)
-
-        botones = ttk.Frame(ventana)
-        botones.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Button(botones, text="Editar Seleccionado", style='Primary.TButton',
-                   command=_editar).pack(side=tk.LEFT, padx=5)
-        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side=tk.LEFT, padx=5)
-
-    def _seg_llenar_formulario(self, registro: dict):
-        self.seg_editando_id = registro['id']
-        self._seg_limpiar_form()
-        self.seg_paciente_id.delete(0, tk.END)
-        self.seg_paciente_id.insert(0, str(registro['paciente_id']))
-        self._seg_cargar_paciente()
-        self.seg_fecha.delete(0, tk.END)
-        self.seg_fecha.insert(0, _mostrar_fecha(registro.get('fecha_visita', '')))
-        self.seg_peso.insert(0, registro.get('peso_kg', '') or '')
-        self.seg_talla.insert(0, registro.get('talla_cm', '') or '')
-        self.seg_tipo_med.set("Decúbito (L)" if registro.get('tipo_medicion') == 'L' else "Bipedestación (H)")
-        self.seg_pc.insert(0, registro.get('pc_cm', '') or '')
-        self.seg_muac.insert(0, registro.get('muac_mm', '') or '')
-        self.seg_obs.insert(0, registro.get('observaciones', '') or '')
-        self.status_var.set(f"Editando seguimiento ID: {registro['id']} — presione Guardar para actualizar.")
-
-    def _seg_eliminar_seleccionado(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        sel = self.tree_seguimiento.selection()
-        if not sel:
-            messagebox.showwarning("Seleccionar", "Seleccione un registro de la lista.")
-            return
-        sid = int(self.tree_seguimiento.item(sel[0], 'values')[0])
-        if messagebox.askyesno("Confirmar", f"¿Eliminar el registro de seguimiento ID {sid}?"):
-            if self.seg_editando_id == sid:
-                self.seg_editando_id = None
-            self.seguimiento_mgr.eliminar(sid)
-            self._seg_cargar_historial()
-
-    def _seg_cancelar_edicion(self):
-        self.seg_editando_id = None
-        self.status_var.set("Edición de seguimiento cancelada.")
-
-    def _seg_limpiar_form(self):
-        for e in (self.seg_peso, self.seg_talla, self.seg_pc, self.seg_muac, self.seg_obs):
-            e.delete(0, tk.END)
-        self.seg_fecha.delete(0, tk.END)
-        self.seg_fecha.insert(0, date.today().strftime("%d-%m-%Y"))
-
-    def _seg_limpiar(self):
-        self.seg_editando_id = None
-        self.seg_paciente_id.delete(0, tk.END)
-        self.seg_nombre.config(state='normal')
-        self.seg_nombre.delete(0, tk.END)
-        self.seg_nombre.config(state='readonly')
-        self._seg_limpiar_form()
-        for item in self.tree_seguimiento.get_children():
-            self.tree_seguimiento.delete(item)
-
-    def _seg_ver_grafica(self):
-        pid = self._seg_leer_pid()
-        if pid is None:
-            return
-        registros = self.seguimiento_mgr.listar_por_paciente(pid)
-        if len(registros) < 2:
-            messagebox.showinfo("Datos insuficientes", "Se necesitan al menos 2 registros para graficar la evolución.")
-            return
-        paciente = self.patient_mgr.obtener_paciente(pid)
-        nombre = paciente['nombre'] if paciente else f"Paciente {pid}"
-
-        def _num(r, key):
-            v = r.get(key)
-            if v is None or v == '':
-                return None
-            try:
-                return float(v)
-            except (TypeError, ValueError):
-                return None
-
-        ventana = tk.Toplevel(self.root)
-        ventana.title(f"Evolución de Crecimiento — {nombre}")
-        ventana.geometry("880x760")
-        ventana.transient(self.root)
-
-        ttk.Label(ventana, text=f"{nombre} — Evolución de {len(registros)} visitas",
-                  style='Title.TLabel').pack(anchor=tk.W, padx=12, pady=6)
-
-        cont = ttk.Frame(ventana)
-        cont.pack(fill=tk.BOTH, expand=True)
-
-        W, H = 820, 240
-        ml, mr, mt, mb = 55, 30, 30, 45
-
-        def _dibujar(parent, titulo, getter, fmt=".1f"):
-            marco = ttk.LabelFrame(parent, text=titulo, padding=6)
-            marco.pack(fill=tk.X, padx=10, pady=6)
-            canvas = tk.Canvas(marco, width=W, height=H, bg='#ffffff')
-            canvas.pack()
-            datos = [getter(r) for r in registros]
-            validos = [(i, v) for i, v in enumerate(datos) if v is not None]
-            if len(validos) < 2:
-                canvas.create_text(W // 2, H // 2, text="Datos insuficientes para esta variable.",
-                                   font=('Segoe UI', 11), fill='#7f8c8d')
-                return
-            pts = [v for _, v in validos]
-            vmax, vmin = max(pts), min(pts)
-            if vmax == vmin:
-                vmax += 1
-                vmin -= 1
-
-            def X(i):
-                return ml + (i) * (W - ml - mr) / (len(pts) - 1)
-
-            def Y(v):
-                return mt + (vmax - v) * (H - mt - mb) / (vmax - vmin)
-
-            canvas.create_line(ml, H - mb, W - mr, H - mb, fill='#333', width=1.5)
-            canvas.create_line(ml, mt, ml, H - mb, fill='#333', width=1.5)
-            pts_px = []
-            for rank, (x, v) in enumerate(validos):
-                px = X(rank)
-                py = Y(v)
-                pts_px.append((px, py))
-                canvas.create_line(px, H - mb, px, H - mb + 4, fill='#333')
-                canvas.create_text(px, H - mb + 14, text=registros[x]['fecha_visita'][5:],
-                                   font=('Segoe UI', 7), fill='#333')
-                if rank > 0:
-                    canvas.create_line(pts_px[rank - 1][0], pts_px[rank - 1][1], px, py, fill='#2980b9', width=2)
-                canvas.create_oval(px - 4, py - 4, px + 4, py + 4, fill='#2980b9', outline='#2980b9')
-                canvas.create_text(px + 10, py - 9, text=f"{v:{fmt}}", font=('Segoe UI', 8, 'bold'), fill='#c0392b')
-            for k in range(5):
-                f = k / 4
-                y = mt + f * (H - mt - mb)
-                vline = vmax - f * (vmax - vmin)
-                canvas.create_text(ml - 8, y, text=f"{vline:.1f}", font=('Segoe UI', 8),
-                                   fill='#555', anchor=tk.E)
-                canvas.create_line(ml, y, W - mr, y, fill='#ececec')
-            canvas.create_text(W // 2, H - 8, text="Fecha (MM-DD)", font=('Segoe UI', 9, 'bold'), fill='#333')
-            canvas.create_text(15, H // 2, text=titulo, font=('Segoe UI', 9, 'bold'), fill='#333', anchor='w')
-
-        _dibujar(cont, "Peso (kg)", lambda r: _num(r, 'peso_kg'))
-        _dibujar(cont, "Talla (cm)", lambda r: _num(r, 'talla_cm'))
-        _dibujar(cont, "IMC", lambda r: _num(r, 'imc'), fmt=".2f")
-        _dibujar(cont, "Perímetro Cefálico (cm)", lambda r: _num(r, 'pc_cm'))
 
     # ==================================================================
     # MÉTODOS: REQUERIMIENTOS
