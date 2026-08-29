@@ -16,12 +16,13 @@ from src.modules.patient_manager import PatientManager
 from src.modules.historia_alimentaria_manager import HistoriaAlimentariaManager
 from src.modules.historia_medica_manager import HistoriaMedicaManager
 from src.modules.laboratorio_manager import LaboratorioManager
+from src.modules.seguimiento_manager import SeguimientoManager
 from src.modules.laboratorio_data import (
     listar_pruebas, obtener_prueba, clasificar_resultado,
     unidades_disponibles, convertir_a_base
 )
 from src.modules.nutrition_calcs import (
-    calcular_edad_meses, calcular_imc,
+    calcular_edad_meses,
     calcular_z_score_peso_edad, calcular_z_score_talla_edad,
     calcular_z_score_peso_talla, calcular_z_score_imc_edad,
     clasificar_estado_nutricional, clasificar_talla_edad,
@@ -101,6 +102,7 @@ class MainWindow:
         self.historia_mgr = HistoriaAlimentariaManager(self.db)
         self.historia_med_mgr = HistoriaMedicaManager(self.db)
         self.laboratorio_mgr = LaboratorioManager(self.db)
+        self.seguimiento_mgr = SeguimientoManager(self.db)
         from src.modules.antropometria_manager import AntropometriaManager
         self.antropometria_mgr = AntropometriaManager(self.db)
 
@@ -111,6 +113,10 @@ class MainWindow:
         self._crear_pestanas()
 
         self.paciente_seleccionado: Optional[int] = None
+        self.ha_editando_id: Optional[int] = None
+        self.hm_editando_id: Optional[int] = None
+        self.lab_editando_id: Optional[int] = None
+        self.seg_editando_id: Optional[int] = None
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _configurar_estilo(self):
@@ -166,6 +172,7 @@ class MainWindow:
         self._crear_pestana_historia_alimentaria()
         self._crear_pestana_antropometria()
         self._crear_pestana_laboratorios()
+        self._crear_pestana_seguimiento()
 
     # ==================================================================
     # PESTAÑA 1: PACIENTES
@@ -266,24 +273,92 @@ class MainWindow:
     # PESTAÑA 3: SEGUIMIENTO
     # ==================================================================
     def _crear_pestana_seguimiento(self):
-        frame = ttk.Frame(self.notebook, padding=10)
+        frame = ScrollFrame(self.notebook, bg=COLOR_BG)
         self.notebook.add(frame, text="  Seguimiento  ")
-        ttk.Label(frame, text="Historial de Crecimiento", style='Title.TLabel').pack(anchor=tk.W)
-        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+        parent = frame.inner
 
-        input_frame = ttk.Frame(frame)
-        input_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(input_frame, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
-        self.entry_seg_id = ttk.Entry(input_frame, width=10)
-        self.entry_seg_id.pack(side=tk.LEFT, padx=5)
-        ttk.Button(input_frame, text="Cargar Historial", command=self._cargar_historial).pack(side=tk.LEFT, padx=5)
+        ttk.Label(parent, text="Seguimiento de Crecimiento", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Historial evolutivo por paciente (peso, talla, IMC, perímetros)", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
-        cols = ("Fecha", "Peso (kg)", "Talla (cm)", "IMC", "Per. Cefálico", "Observaciones")
-        self.tree_seguimiento = ttk.Treeview(frame, columns=cols, show='headings', height=12)
+        # --- Datos del Paciente ---
+        hdr = ttk.LabelFrame(parent, text=" Paciente ", padding=8)
+        hdr.pack(fill=tk.X, padx=10, pady=5)
+        r0 = ttk.Frame(hdr)
+        r0.pack(fill=tk.X, pady=2)
+        ttk.Label(r0, text="ID Paciente:").pack(side=tk.LEFT, padx=5)
+        self.seg_paciente_id = ttk.Entry(r0, width=10)
+        self.seg_paciente_id.pack(side=tk.LEFT, padx=5)
+        ttk.Button(r0, text="Cargar Paciente", command=self._seg_cargar_paciente).pack(side=tk.LEFT, padx=5)
+        self.seg_paciente_id.bind("<Return>", lambda e: self._seg_cargar_paciente())
+        ttk.Label(r0, text="Nombre:").pack(side=tk.LEFT, padx=(20, 5))
+        self.seg_nombre = ttk.Entry(r0, width=28, state='readonly')
+        self.seg_nombre.pack(side=tk.LEFT, padx=5)
+
+        # --- Formulario de registro ---
+        form = ttk.LabelFrame(parent, text=" Nuevo Registro de Seguimiento ", padding=8)
+        form.pack(fill=tk.X, padx=10, pady=5)
+
+        rf = ttk.Frame(form)
+        rf.pack(fill=tk.X, pady=2)
+        ttk.Label(rf, text="Fecha visita (DD-MM-AAAA):").pack(side=tk.LEFT, padx=5)
+        self.seg_fecha = ttk.Entry(rf, width=15)
+        self.seg_fecha.insert(0, date.today().strftime("%d-%m-%Y"))
+        self.seg_fecha.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rf, text="Peso (kg):").pack(side=tk.LEFT, padx=5)
+        self.seg_peso = ttk.Entry(rf, width=10)
+        self.seg_peso.pack(side=tk.LEFT, padx=5)
+        ttk.Label(rf, text="Talla/Longitud (cm):").pack(side=tk.LEFT, padx=5)
+        self.seg_talla = ttk.Entry(rf, width=10)
+        self.seg_talla.pack(side=tk.LEFT, padx=5)
+
+        r2 = ttk.Frame(form)
+        r2.pack(fill=tk.X, pady=2)
+        ttk.Label(r2, text="Tipo de medición:").pack(side=tk.LEFT, padx=5)
+        self.seg_tipo_med = ttk.Combobox(r2, values=["Decúbito (L)", "Bipedestación (H)"], width=18, state="readonly")
+        self.seg_tipo_med.pack(side=tk.LEFT, padx=5)
+        self.seg_tipo_med.set("Decúbito (L)")
+        ttk.Label(r2, text="Perímetro cefálico (cm):").pack(side=tk.LEFT, padx=5)
+        self.seg_pc = ttk.Entry(r2, width=10)
+        self.seg_pc.pack(side=tk.LEFT, padx=5)
+        ttk.Label(r2, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
+        self.seg_muac = ttk.Entry(r2, width=10)
+        self.seg_muac.pack(side=tk.LEFT, padx=5)
+
+        r3 = ttk.Frame(form)
+        r3.pack(fill=tk.X, pady=2)
+        ttk.Label(r3, text="Observaciones:").pack(side=tk.LEFT, padx=5)
+        self.seg_obs = ttk.Entry(r3, width=80)
+        self.seg_obs.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        btn = ttk.Frame(parent)
+        btn.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn, text="Guardar / Actualizar", style='Primary.TButton',
+                   command=self._seg_guardar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Seleccionar / Editar", command=self._seg_seleccionar_a_editar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Eliminar Seleccionado", command=self._seg_eliminar_seleccionado).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Cancelar Edición", command=self._seg_cancelar_edicion).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Ver Gráfica de Evolución", command=self._seg_ver_grafica).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Limpiar", command=self._seg_limpiar).pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
+
+        hist = ttk.LabelFrame(parent, text=" Historial de Crecimiento ", padding=8)
+        hist.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        cols = ("ID", "Fecha", "Peso (kg)", "Talla (cm)", "IMC",
+                "Per. Cefálico", "MUAC", "Observaciones")
+        self.tree_seguimiento = ttk.Treeview(hist, columns=cols, show='headings', height=10)
         for c in cols:
             self.tree_seguimiento.heading(c, text=c)
-            self.tree_seguimiento.column(c, width=130, anchor=tk.CENTER)
-        self.tree_seguimiento.pack(fill=tk.BOTH, expand=True, pady=5)
+            self.tree_seguimiento.column(c, width=110, anchor=tk.CENTER)
+        self.tree_seguimiento.column("ID", width=50)
+        self.tree_seguimiento.column("IMC", width=70)
+        self.tree_seguimiento.column("Observaciones", width=250, anchor=tk.W)
+        tree_scroll = ttk.Scrollbar(hist, orient=tk.VERTICAL, command=self.tree_seguimiento.yview)
+        self.tree_seguimiento.configure(yscrollcommand=tree_scroll.set)
+        self.tree_seguimiento.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        tree_scroll.pack(fill=tk.Y, side=tk.RIGHT)
 
     # ==================================================================
     # PESTAÑA 4: REQUERIMIENTOS
@@ -536,6 +611,8 @@ class MainWindow:
                    command=self._guardar_historia).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cargar Historia", command=self._cargar_historia_alimentaria).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Ver Último Registro", command=self._ver_ultima_historia).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Seleccionar / Editar Registro", command=self._seleccionar_historia_a_editar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancelar Edición", command=self._cancelar_edicion_historia).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Limpiar Formulario", command=self._limpiar_historia).pack(side=tk.LEFT, padx=5)
 
     # ==================================================================
@@ -559,7 +636,7 @@ class MainWindow:
         self.hm_paciente_id = ttk.Entry(r0, width=10)
         self.hm_paciente_id.pack(side=tk.LEFT, padx=5)
         ttk.Button(r0, text="Cargar Paciente", command=self._hm_cargar_paciente).pack(side=tk.LEFT, padx=5)
-        self.hm_paciente_id.bind("<Return>", lambda e: self.hm_cargar_paciente())
+        self.hm_paciente_id.bind("<Return>", lambda e: self._hm_cargar_paciente())
 
         r0b = ttk.Frame(sel_frame)
         r0b.pack(fill=tk.X, pady=2)
@@ -610,6 +687,8 @@ class MainWindow:
         ttk.Button(btn_frame, text="Guardar Historia Médica", style='Primary.TButton',
                    command=self._hm_guardar).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Ver Último Registro", command=self._hm_ver_ultimo).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Seleccionar / Editar Registro", command=self._seleccionar_historia_medica_a_editar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancelar Edición", command=self._cancelar_edicion_historia_medica).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Limpiar Formulario", command=self._hm_limpiar).pack(side=tk.LEFT, padx=5)
 
     def _hm_cargar_paciente(self):
@@ -655,9 +734,91 @@ class MainWindow:
         for nombre, campo in self.hm_campos.items():
             datos[nombre] = campo.get("1.0", tk.END).strip()
 
+        if self.hm_editando_id is not None:
+            self.historia_med_mgr.actualizar(self.hm_editando_id, fecha_eval, evaluador, datos)
+            self.status_var.set(f"Historia médica actualizada (ID: {self.hm_editando_id})")
+            messagebox.showinfo("Éxito", "Historia médica actualizada correctamente.")
+            self.hm_editando_id = None
+            return
+
         hid = self.historia_med_mgr.guardar(pid, fecha_eval, evaluador, datos)
         self.status_var.set(f"Historia médica guardada (ID: {hid})")
         messagebox.showinfo("Éxito", f"Historia médica guardada correctamente.\nID Registro: {hid}")
+
+    def _seleccionar_historia_medica_a_editar(self):
+        try:
+            pid = int(self.hm_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+        historiales = self.historia_med_mgr.listar_por_paciente(pid)
+        if not historiales:
+            messagebox.showinfo("Sin registros", "No hay historias médicas para este paciente.")
+            return
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Seleccionar Historia Médica a editar — Paciente {pid}")
+        ventana.geometry("720x400")
+
+        tree = ttk.Treeview(ventana, columns=("id", "fecha", "evaluador"), show='headings', height=12)
+        tree.heading("id", text="ID")
+        tree.heading("fecha", text="Fecha Evaluación")
+        tree.heading("evaluador", text="Evaluador")
+        tree.column("id", width=60, anchor=tk.CENTER)
+        tree.column("fecha", width=150, anchor=tk.CENTER)
+        tree.column("evaluador", width=200, anchor=tk.W)
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        for h in historiales:
+            tree.insert("", tk.END, values=(h['id'], h['fecha_evaluacion'], h['evaluador']))
+
+        def _editar():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
+                return
+            hid = int(tree.item(sel[0], "values")[0])
+            registro = self.historia_med_mgr.obtener(hid)
+            ventana.destroy()
+            if not registro:
+                messagebox.showerror("Error", "Registro no encontrado.")
+                return
+            self.hm_editando_id = hid
+            self._hm_limpiar()
+            self.hm_paciente_id.delete(0, tk.END)
+            self.hm_paciente_id.insert(0, str(registro['paciente_id']))
+            self._hm_cargar_paciente()
+            self.hm_fecha_eval.delete(0, tk.END)
+            self.hm_fecha_eval.insert(0, _mostrar_fecha(registro.get('fecha_evaluacion', '')))
+            self.hm_evaluador.insert(0, registro.get('evaluador', '') or '')
+            for nombre, campo in self.hm_campos.items():
+                campo.insert("1.0", registro.get(nombre, '') or '')
+            self.status_var.set(f"Editando historia médica ID: {hid} — presione Guardar para actualizar.")
+
+        botones = ttk.Frame(ventana)
+        botones.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(botones, text="Editar Seleccionado", style='Primary.TButton',
+                   command=_editar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones, text="Eliminar Seleccionado",
+                   command=lambda: self._eliminar_historia_medica_seleccionada(tree)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side=tk.LEFT, padx=5)
+
+    def _eliminar_historia_medica_seleccionada(self, tree):
+        sel = tree.selection()
+        if not sel:
+            messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
+            return
+        hid = int(tree.item(sel[0], "values")[0])
+        if messagebox.askyesno("Confirmar", f"¿Eliminar la historia médica ID {hid}?"):
+            self.historia_med_mgr.eliminar(hid)
+            if self.hm_editando_id == hid:
+                self.hm_editando_id = None
+            messagebox.showinfo("Eliminado", "Registro eliminado.")
+            tree.delete(sel[0])
+
+    def _cancelar_edicion_historia_medica(self):
+        self.hm_editando_id = None
+        self.status_var.set("Edición de historia médica cancelada.")
 
     def _hm_ver_ultimo(self):
         """Muestra el último registro de historia médica del paciente."""
@@ -940,7 +1101,9 @@ class MainWindow:
 
         btn_hist = ttk.Frame(parent)
         btn_hist.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn_hist, text="Editar Registro Seleccionado", command=self._lab_editar_seleccionado).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_hist, text="Eliminar Registro Seleccionado", command=self._lab_eliminar_seleccionado).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_hist, text="Cancelar Edición", command=self._lab_cancelar_edicion).pack(side=tk.LEFT, padx=5)
 
     def _lab_mostrar_info_prueba(self, event=None):
         idx = self.lab_combo_prueba.current()
@@ -1039,6 +1202,23 @@ class MainWindow:
         if unidad_ingresada != prueba.get("unidad", ""):
             observaciones = f"Valor original: {valor} {unidad_ingresada}"
 
+        if self.lab_editando_id is not None:
+            self.laboratorio_mgr.actualizar(
+                self.lab_editando_id, fecha_toma, prueba["nombre"], f"{resultado['valor']:.4g}",
+                prueba.get("unidad", ""), edad_meses, resultado["clasificacion"],
+                resultado["rango_texto"], observaciones
+            )
+            self.lab_resultado_lbl.config(
+                text=(f"Actualizado → {prueba['nombre']}: {valor} {unidad_ingresada}  →  "
+                      f"{resultado['valor']:.4g} {prueba.get('unidad', '')}  →  "
+                      f"{resultado['clasificacion']}  (Referencia: {resultado['rango_texto']})")
+            )
+            self.status_var.set(f"Resultado de laboratorio actualizado (ID: {self.lab_editando_id})")
+            self.lab_editando_id = None
+            self.lab_valor.delete(0, tk.END)
+            self._lab_cargar_historial()
+            return
+
         self.laboratorio_mgr.guardar(
             pid, fecha_toma, prueba["nombre"], f"{resultado['valor']:.4g}", prueba.get("unidad", ""),
             edad_meses, resultado["clasificacion"], resultado["rango_texto"], observaciones
@@ -1075,8 +1255,60 @@ class MainWindow:
             return
         if messagebox.askyesno("Confirmar", "¿Eliminar el registro de laboratorio seleccionado?"):
             vals = self.tree_laboratorios.item(sel[0], 'values')
+            if self.lab_editando_id == int(vals[0]):
+                self.lab_editando_id = None
             self.laboratorio_mgr.eliminar(int(vals[0]))
             self._lab_cargar_historial()
+
+    def _lab_editar_seleccionado(self):
+        """Carga el registro de laboratorio seleccionado en el formulario para editarlo."""
+        sel = self.tree_laboratorios.selection()
+        if not sel:
+            messagebox.showwarning("Seleccionar", "Seleccione un registro de la lista.")
+            return
+        vals = self.tree_laboratorios.item(sel[0], 'values')
+        rid = int(vals[0])
+        registro = self.laboratorio_mgr.obtener(rid)
+        if not registro:
+            messagebox.showerror("Error", "Registro no encontrado.")
+            return
+
+        nombres = [obtener_prueba(c)["nombre"] for c in self.lab_codigos]
+        idx = -1
+        for i, n in enumerate(nombres):
+            if n == registro['tipo_prueba']:
+                idx = i
+                break
+        if idx < 0:
+            messagebox.showerror("Error", "Prueba no reconocida en el catálogo.")
+            return
+
+        self.lab_editando_id = rid
+        self.lab_combo_prueba.current(idx)
+        self._lab_mostrar_info_prueba()
+
+        unidades = unidades_disponibles(self.lab_codigos[idx])
+        self.lab_combo_unidad.config(values=unidades)
+        if registro['unidad'] in unidades:
+            self.lab_combo_unidad.set(registro['unidad'])
+        else:
+            self.lab_combo_unidad.current(0)
+
+        self.lab_valor.delete(0, tk.END)
+        self.lab_valor.insert(0, registro['valor'])
+        if registro.get('fecha_toma'):
+            self.lab_fecha_toma.delete(0, tk.END)
+            self.lab_fecha_toma.insert(0, _mostrar_fecha(registro['fecha_toma']))
+        self.lab_resultado_lbl.config(
+            text=f"Editando registro ID {rid} — {registro['tipo_prueba']} ({registro['resultado_clasificacion']}). "
+                 "Modifique los campos y presione 'Evaluar y Guardar' para actualizar."
+        )
+        self.status_var.set(f"Editando laboratorio ID: {rid} — presione Evaluar y Guardar.")
+
+    def _lab_cancelar_edicion(self):
+        self.lab_editando_id = None
+        self.lab_resultado_lbl.config(text="Sin evaluar.")
+        self.status_var.set("Edición de laboratorio cancelada.")
 
     def _ant_cargar_paciente(self):
         try:
@@ -1708,9 +1940,17 @@ class MainWindow:
         peso_f = float(peso) if peso else 0.0
         talla_f = float(talla) if talla else 0.0
 
-        pid = self.patient_mgr.agregar_paciente(nombre, fecha_dt, sexo, peso_f, talla_f)
-        self.status_var.set(f"Paciente {nombre} registrado con ID {pid}")
-        messagebox.showinfo("Éxito", f"Paciente registrado correctamente.\nID: {pid}")
+        # Si hay un paciente seleccionado, ACTUALIZA; si no, INSERT nuevo
+        if getattr(self, 'paciente_seleccionado', None):
+            pid = self.paciente_seleccionado
+            self.patient_mgr.actualizar_paciente(pid, nombre, fecha_dt, sexo, peso_f, talla_f)
+            msg = f"Paciente {nombre} (ID {pid}) actualizado correctamente."
+        else:
+            pid = self.patient_mgr.agregar_paciente(nombre, fecha_dt, sexo, peso_f, talla_f)
+            msg = f"Paciente {nombre} registrado con ID {pid}"
+        self.status_var.set(msg)
+        messagebox.showinfo("Éxito", msg)
+        self.paciente_seleccionado = None
         self._limpiar_formulario()
         self._cargar_pacientes()
 
@@ -1718,6 +1958,7 @@ class MainWindow:
         for e in [self.entry_nombre, self.entry_fecha_nac, self.entry_peso, self.entry_talla]:
             e.delete(0, tk.END)
         self.combo_sexo.set("M")
+        self.paciente_seleccionado = None
 
     def _cargar_pacientes(self):
         for item in self.tree_pacientes.get_children():
@@ -1756,6 +1997,19 @@ class MainWindow:
         paciente = self.patient_mgr.obtener_paciente(paciente_id)
         if not paciente:
             return
+
+        # Llena el formulario de Pacientes (para edición)
+        self.entry_nombre.delete(0, tk.END)
+        self.entry_nombre.insert(0, paciente['nombre'])
+        self.entry_fecha_nac.delete(0, tk.END)
+        self.entry_fecha_nac.insert(0, _mostrar_fecha(paciente['fecha_nacimiento']))
+        self.combo_sexo.set(paciente['sexo'])
+        self.entry_peso.delete(0, tk.END)
+        if paciente['peso_kg'] is not None:
+            self.entry_peso.insert(0, str(paciente['peso_kg']))
+        self.entry_talla.delete(0, tk.END)
+        if paciente['talla_cm'] is not None:
+            self.entry_talla.insert(0, str(paciente['talla_cm']))
 
         self.ha_paciente_id.delete(0, tk.END)
         self.ha_paciente_id.insert(0, str(paciente_id))
@@ -1875,22 +2129,287 @@ class MainWindow:
     # ==================================================================
     # MÉTODOS: SEGUIMIENTO
     # ==================================================================
-    def _cargar_historial(self):
+    def _seg_leer_pid(self):
         try:
-            pid = int(self.entry_seg_id.get().strip())
+            return int(self.seg_paciente_id.get().strip())
         except (ValueError, TypeError):
-            messagebox.showerror("Error", "Ingrese un ID válido.")
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return None
+
+    def _seg_cargar_paciente(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
+            return
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+        self.seg_nombre.config(state='normal')
+        self.seg_nombre.delete(0, tk.END)
+        self.seg_nombre.insert(0, paciente['nombre'])
+        self.seg_nombre.config(state='readonly')
+        self._seg_cargar_historial()
+        self.status_var.set(f"Paciente {paciente['nombre']} cargado en Seguimiento")
+
+    def _seg_cargar_historial(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
             return
         for item in self.tree_seguimiento.get_children():
             self.tree_seguimiento.delete(item)
-        historial = self.patient_mgr.historial_crecimiento(pid)
-        for h in historial:
-            imc = calcular_imc(h['peso_kg'], h['talla_cm']) if h['talla_cm'] else 0
+        registros = self.seguimiento_mgr.listar_por_paciente(pid)
+        for r in registros:
             self.tree_seguimiento.insert("", tk.END, values=(
-                _mostrar_fecha(h['fecha']), h['peso_kg'], h['talla_cm'],
-                imc, h.get('perimetro_cefalico_cm', ''), h.get('observaciones', '')
+                r['id'], _mostrar_fecha(r['fecha_visita']),
+                r.get('peso_kg', ''), r.get('talla_cm', ''),
+                r.get('imc', ''), r.get('pc_cm', ''),
+                r.get('muac_mm', ''), r.get('observaciones', '')
             ))
-        self.status_var.set(f"{len(historial)} registro(s) de crecimiento")
+        self.status_var.set(f"{len(registros)} registro(s) de seguimiento")
+
+    def _seg_leer_valores(self):
+        peso = None
+        talla = None
+        pc = None
+        muac = None
+        try:
+            if self.seg_peso.get().strip():
+                peso = float(self.seg_peso.get().strip())
+            if self.seg_talla.get().strip():
+                talla = float(self.seg_talla.get().strip())
+            if self.seg_pc.get().strip():
+                pc = float(self.seg_pc.get().strip())
+            if self.seg_muac.get().strip():
+                muac = float(self.seg_muac.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Ingrese valores numéricos válidos (coma o punto).")
+            return None
+        return peso, talla, pc, muac
+
+    def _seg_guardar(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
+            return
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+        try:
+            fecha_visita = _parsear_fecha(self.seg_fecha.get())
+        except ValueError:
+            messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
+            return
+        vals = self._seg_leer_valores()
+        if vals is None:
+            return
+        peso, talla, pc, muac = vals
+        tipo_med = "L" if "Dec" in self.seg_tipo_med.get() else "H"
+        obs = self.seg_obs.get().strip()
+
+        from datetime import date as date_cls
+        edad_meses = None
+        try:
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            edad_meses = (fecha_visita - fecha_nac).days / 30.4375
+        except (ValueError, TypeError):
+            pass
+
+        if self.seg_editando_id is not None:
+            self.seguimiento_mgr.actualizar(
+                self.seg_editando_id, fecha_visita, peso, talla, tipo_med,
+                pc, muac, obs, edad_meses)
+            self.status_var.set(f"Registro de seguimiento actualizado (ID: {self.seg_editando_id})")
+            messagebox.showinfo("Éxito", "Registro de seguimiento actualizado correctamente.")
+            self.seg_editando_id = None
+        else:
+            sid = self.seguimiento_mgr.guardar(
+                pid, fecha_visita, peso, talla, tipo_med, pc, muac, obs, edad_meses)
+            self.status_var.set(f"Registro de seguimiento guardado (ID: {sid})")
+            messagebox.showinfo("Éxito", f"Registro de seguimiento guardado.\nID: {sid}")
+        self._seg_cargar_historial()
+
+    def _seg_seleccionar_a_editar(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
+            return
+        registros = self.seguimiento_mgr.listar_por_paciente(pid)
+        if not registros:
+            messagebox.showinfo("Sin registros", "No hay registros de seguimiento para este paciente.")
+            return
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Seleccionar registro de seguimiento — Paciente {pid}")
+        ventana.geometry("760x400")
+        tree = ttk.Treeview(ventana, columns=("id", "fecha", "peso", "talla", "imc"),
+                            show='headings', height=12)
+        for c, w in (("id", 60), ("fecha", 130), ("peso", 100), ("talla", 100), ("imc", 80)):
+            tree.heading(c, text=c.capitalize())
+            tree.column(c, width=w, anchor=tk.CENTER)
+        tree.heading("id", text="ID")
+        tree.heading("fecha", text="Fecha")
+        tree.heading("peso", text="Peso (kg)")
+        tree.heading("talla", text="Talla (cm)")
+        tree.heading("imc", text="IMC")
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        for r in registros:
+            tree.insert("", tk.END, values=(
+                r['id'], _mostrar_fecha(r['fecha_visita']),
+                r.get('peso_kg', ''), r.get('talla_cm', ''), r.get('imc', '')))
+
+        def _editar():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
+                return
+            sid = int(tree.item(sel[0], "values")[0])
+            registro = self.seguimiento_mgr.obtener(sid)
+            ventana.destroy()
+            if not registro:
+                messagebox.showerror("Error", "Registro no encontrado.")
+                return
+            self._seg_llenar_formulario(registro)
+
+        botones = ttk.Frame(ventana)
+        botones.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(botones, text="Editar Seleccionado", style='Primary.TButton',
+                   command=_editar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side=tk.LEFT, padx=5)
+
+    def _seg_llenar_formulario(self, registro: dict):
+        self.seg_editando_id = registro['id']
+        self._seg_limpiar_form()
+        self.seg_paciente_id.delete(0, tk.END)
+        self.seg_paciente_id.insert(0, str(registro['paciente_id']))
+        self._seg_cargar_paciente()
+        self.seg_fecha.delete(0, tk.END)
+        self.seg_fecha.insert(0, _mostrar_fecha(registro.get('fecha_visita', '')))
+        self.seg_peso.insert(0, registro.get('peso_kg', '') or '')
+        self.seg_talla.insert(0, registro.get('talla_cm', '') or '')
+        self.seg_tipo_med.set("Decúbito (L)" if registro.get('tipo_medicion') == 'L' else "Bipedestación (H)")
+        self.seg_pc.insert(0, registro.get('pc_cm', '') or '')
+        self.seg_muac.insert(0, registro.get('muac_mm', '') or '')
+        self.seg_obs.insert(0, registro.get('observaciones', '') or '')
+        self.status_var.set(f"Editando seguimiento ID: {registro['id']} — presione Guardar para actualizar.")
+
+    def _seg_eliminar_seleccionado(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
+            return
+        sel = self.tree_seguimiento.selection()
+        if not sel:
+            messagebox.showwarning("Seleccionar", "Seleccione un registro de la lista.")
+            return
+        sid = int(self.tree_seguimiento.item(sel[0], 'values')[0])
+        if messagebox.askyesno("Confirmar", f"¿Eliminar el registro de seguimiento ID {sid}?"):
+            if self.seg_editando_id == sid:
+                self.seg_editando_id = None
+            self.seguimiento_mgr.eliminar(sid)
+            self._seg_cargar_historial()
+
+    def _seg_cancelar_edicion(self):
+        self.seg_editando_id = None
+        self.status_var.set("Edición de seguimiento cancelada.")
+
+    def _seg_limpiar_form(self):
+        for e in (self.seg_peso, self.seg_talla, self.seg_pc, self.seg_muac, self.seg_obs):
+            e.delete(0, tk.END)
+        self.seg_fecha.delete(0, tk.END)
+        self.seg_fecha.insert(0, date.today().strftime("%d-%m-%Y"))
+
+    def _seg_limpiar(self):
+        self.seg_editando_id = None
+        self.seg_paciente_id.delete(0, tk.END)
+        self.seg_nombre.config(state='normal')
+        self.seg_nombre.delete(0, tk.END)
+        self.seg_nombre.config(state='readonly')
+        self._seg_limpiar_form()
+        for item in self.tree_seguimiento.get_children():
+            self.tree_seguimiento.delete(item)
+
+    def _seg_ver_grafica(self):
+        pid = self._seg_leer_pid()
+        if pid is None:
+            return
+        registros = self.seguimiento_mgr.listar_por_paciente(pid)
+        if len(registros) < 2:
+            messagebox.showinfo("Datos insuficientes", "Se necesitan al menos 2 registros para graficar la evolución.")
+            return
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        nombre = paciente['nombre'] if paciente else f"Paciente {pid}"
+
+        def _num(r, key):
+            v = r.get(key)
+            if v is None or v == '':
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Evolución de Crecimiento — {nombre}")
+        ventana.geometry("880x760")
+        ventana.transient(self.root)
+
+        ttk.Label(ventana, text=f"{nombre} — Evolución de {len(registros)} visitas",
+                  style='Title.TLabel').pack(anchor=tk.W, padx=12, pady=6)
+
+        cont = ttk.Frame(ventana)
+        cont.pack(fill=tk.BOTH, expand=True)
+
+        W, H = 820, 240
+        ml, mr, mt, mb = 55, 30, 30, 45
+
+        def _dibujar(parent, titulo, getter, fmt=".1f"):
+            marco = ttk.LabelFrame(parent, text=titulo, padding=6)
+            marco.pack(fill=tk.X, padx=10, pady=6)
+            canvas = tk.Canvas(marco, width=W, height=H, bg='#ffffff')
+            canvas.pack()
+            datos = [getter(r) for r in registros]
+            validos = [(i, v) for i, v in enumerate(datos) if v is not None]
+            if len(validos) < 2:
+                canvas.create_text(W // 2, H // 2, text="Datos insuficientes para esta variable.",
+                                   font=('Segoe UI', 11), fill='#7f8c8d')
+                return
+            pts = [v for _, v in validos]
+            vmax, vmin = max(pts), min(pts)
+            if vmax == vmin:
+                vmax += 1
+                vmin -= 1
+
+            def X(i):
+                return ml + (i) * (W - ml - mr) / (len(pts) - 1)
+
+            def Y(v):
+                return mt + (vmax - v) * (H - mt - mb) / (vmax - vmin)
+
+            canvas.create_line(ml, H - mb, W - mr, H - mb, fill='#333', width=1.5)
+            canvas.create_line(ml, mt, ml, H - mb, fill='#333', width=1.5)
+            pts_px = []
+            for rank, (x, v) in enumerate(validos):
+                px = X(rank)
+                py = Y(v)
+                pts_px.append((px, py))
+                canvas.create_line(px, H - mb, px, H - mb + 4, fill='#333')
+                canvas.create_text(px, H - mb + 14, text=registros[x]['fecha_visita'][5:],
+                                   font=('Segoe UI', 7), fill='#333')
+                if rank > 0:
+                    canvas.create_line(pts_px[rank - 1][0], pts_px[rank - 1][1], px, py, fill='#2980b9', width=2)
+                canvas.create_oval(px - 4, py - 4, px + 4, py + 4, fill='#2980b9', outline='#2980b9')
+                canvas.create_text(px + 10, py - 9, text=f"{v:{fmt}}", font=('Segoe UI', 8, 'bold'), fill='#c0392b')
+            for k in range(5):
+                f = k / 4
+                y = mt + f * (H - mt - mb)
+                vline = vmax - f * (vmax - vmin)
+                canvas.create_text(ml - 8, y, text=f"{vline:.1f}", font=('Segoe UI', 8),
+                                   fill='#555', anchor=tk.E)
+                canvas.create_line(ml, y, W - mr, y, fill='#ececec')
+            canvas.create_text(W // 2, H - 8, text="Fecha (MM-DD)", font=('Segoe UI', 9, 'bold'), fill='#333')
+            canvas.create_text(15, H // 2, text=titulo, font=('Segoe UI', 9, 'bold'), fill='#333', anchor='w')
+
+        _dibujar(cont, "Peso (kg)", lambda r: _num(r, 'peso_kg'))
+        _dibujar(cont, "Talla (cm)", lambda r: _num(r, 'talla_cm'))
+        _dibujar(cont, "IMC", lambda r: _num(r, 'imc'), fmt=".2f")
+        _dibujar(cont, "Perímetro Cefálico (cm)", lambda r: _num(r, 'pc_cm'))
 
     # ==================================================================
     # MÉTODOS: REQUERIMIENTOS
@@ -2057,9 +2576,167 @@ class MainWindow:
         evaluador = self.ha_evaluador.get().strip()
         datos = self._recopilar_datos_historia()
 
+        if self.ha_editando_id is not None:
+            self.historia_mgr.actualizar(self.ha_editando_id, fecha_eval, evaluador, datos)
+            self.status_var.set(f"Historia alimentaria actualizada (ID: {self.ha_editando_id})")
+            messagebox.showinfo("Éxito", "Historia alimentaria actualizada correctamente.")
+            self.ha_editando_id = None
+            return
+
         hid = self.historia_mgr.guardar(pid, fecha_eval, evaluador, datos)
         self.status_var.set(f"Historia alimentaria guardada (ID: {hid})")
         messagebox.showinfo("Éxito", f"Historia alimentaria guardada correctamente.\nID Registro: {hid}")
+
+    # ==================================================================
+    # EDICIÓN DE HISTORIA ALIMENTARIA
+    # ==================================================================
+    def _editar_alimento_seleccionado(self, hid: int, fila: int):
+        """Carga un registro en el formulario para su edición."""
+        registro = self.historia_mgr.obtener(hid)
+        if not registro:
+            messagebox.showerror("Error", "Registro no encontrado.")
+            return
+        self.ha_editando_id = hid
+        self.ha_paciente_id.delete(0, tk.END)
+        self.ha_paciente_id.insert(0, str(registro['paciente_id']))
+        self._cargar_paciente_en_historia()
+        self._llenar_historia_formulario(registro)
+        self.status_var.set(f"Editando historia alimentaria ID: {hid} (fila {fila}) — presione Guardar para actualizar.")
+
+    def _seleccionar_historia_a_editar(self):
+        """Muestra una lista de registros del paciente para elegir uno y editarlo."""
+        try:
+            pid = int(self.ha_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese un ID de paciente válido.")
+            return
+        historiales = self.historia_mgr.listar_por_paciente(pid)
+        if not historiales:
+            messagebox.showinfo("Sin registros", "No hay historias alimentarias para este paciente.")
+            return
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Seleccionar Historia Alimentaria a editar — Paciente {pid}")
+        ventana.geometry("720x400")
+
+        tree = ttk.Treeview(ventana, columns=("id", "fecha", "evaluador"), show='headings', height=12)
+        tree.heading("id", text="ID")
+        tree.heading("fecha", text="Fecha Evaluación")
+        tree.heading("evaluador", text="Evaluador")
+        tree.column("id", width=60, anchor=tk.CENTER)
+        tree.column("fecha", width=150, anchor=tk.CENTER)
+        tree.column("evaluador", width=200, anchor=tk.W)
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        for h in historiales:
+            tree.insert("", tk.END, values=(h['id'], h['fecha_evaluacion'], h['evaluador']))
+
+        def _editar_seleccion():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
+                return
+            vals = tree.item(sel[0], "values")
+            hid = int(vals[0])
+            fila = int(vals[0])
+            ventana.destroy()
+            self._editar_alimento_seleccionado(hid, fila)
+
+        botones = ttk.Frame(ventana)
+        botones.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(botones, text="Editar Seleccionado", style='Primary.TButton',
+                   command=_editar_seleccion).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones, text="Eliminar Seleccionado",
+                   command=lambda: self._eliminar_historia_seleccionada(tree)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones, text="Cerrar", command=ventana.destroy).pack(side=tk.LEFT, padx=5)
+
+    def _eliminar_historia_seleccionada(self, tree):
+        sel = tree.selection()
+        if not sel:
+            messagebox.showwarning("Aviso", "Seleccione un registro de la lista.")
+            return
+        vals = tree.item(sel[0], "values")
+        hid = int(vals[0])
+        if messagebox.askyesno("Confirmar", f"¿Eliminar la historia alimentaria ID {hid}?"):
+            self.historia_mgr.eliminar(hid)
+            if self.ha_editando_id == hid:
+                self.ha_editando_id = None
+            messagebox.showinfo("Eliminado", "Registro eliminado.")
+            tree.delete(sel[0])
+
+    def _cancelar_edicion_historia(self):
+        self.ha_editando_id = None
+        self.status_var.set("Edición de historia alimentaria cancelada.")
+
+    def _llenar_historia_formulario(self, registro: dict):
+        """Llena los campos del formulario desde un registro de la BD."""
+        inv_apetito = {"excelente": "Excelente", "bueno": "Bueno", "regular": "Regular", "pobre": "Pobre"}
+        inv_snacks = {"nunca": "Nunca", "ocasionalmente": "Ocasionalmente (1-2 veces/sem)",
+                      "frecuentemente": "Frecuentemente (diario)", "varias_veces_dia": "Varias veces al día"}
+        inv_alergias = {"si": "Sí", "no": "No", "en_estudio": "En estudio"}
+        inv_familia = {"siempre": "Sí, siempre", "a_veces": "A veces", "rara_vez": "Rara vez", "no": "No"}
+        inv_ambiente = {"si": "Sí", "a_veces": "A veces", "no": "No"}
+
+        self._limpiar_historia()
+
+        tipo_val = registro.get('tipo_alimentacion', '')
+        if tipo_val not in ('lactancia_exclusiva', 'formula_exclusiva', 'mixta'):
+            tipo_val = 'lactancia_exclusiva'
+        self.ha_tipo_alimentacion.set(tipo_val)
+        self.ha_fecha_eval.delete(0, tk.END)
+        self.ha_fecha_eval.insert(0, _mostrar_fecha(registro.get('fecha_evaluacion', '')))
+        self.ha_evaluador.insert(0, registro.get('evaluador', '') or '')
+
+        self.ha_lm_frecuencia.insert(0, registro.get('lm_frecuencia', '') or '')
+        self.ha_lm_duracion.insert(0, registro.get('lm_duracion_minutos', '') or '')
+        self.ha_lm_posicion.insert(0, registro.get('lm_posicion_tecnica', '') or '')
+        self.ha_lm_suplementos.set("si" if registro.get('lm_suplementos') else "no")
+        self.ha_lm_suplementos_detalle.insert(0, registro.get('lm_suplementos_detalle', '') or '')
+
+        self.ha_fi_tipo.insert(0, registro.get('fi_tipo_formula', '') or '')
+        self.ha_fi_preparacion.insert(0, registro.get('fi_preparacion', '') or '')
+        self.ha_fi_kcal.insert(0, registro.get('fi_kcal_100ml', '') or '')
+        self.ha_fi_tomas_24h.insert(0, registro.get('fi_tomas_24h', '') or '')
+        self.ha_fi_frecuencia.insert(0, registro.get('fi_frecuencia', '') or '')
+        self.ha_fi_vol_ofrecido.insert(0, registro.get('fi_volumen_ofrecido', '') or '')
+        self.ha_fi_vol_real.insert(0, registro.get('fi_volumen_real', '') or '')
+        self.ha_fi_duracion.insert(0, registro.get('fi_duracion_toma', '') or '')
+        self.ha_fi_adicional.set("si" if registro.get('fi_adicional') else "no")
+        self.ha_fi_adicional_detalle.insert(0, registro.get('fi_adicional_detalle', '') or '')
+
+        self.ha_comidas_snacks.insert(0, registro.get('comidas_snacks_dia', '') or '')
+        self.ha_lugar_comidas.insert(0, registro.get('lugar_comidas', '') or '')
+
+        patron_keys = {
+            "desayuno": "desayuno", "merienda_manana": "merienda_manana",
+            "almuerzo": "almuerzo", "merienda_tarde": "merienda_tarde",
+            "cena": "cena", "otra_merienda": "otra_merienda",
+        }
+        for var_name in patron_keys:
+            entries = self.ha_patron_entries.get(var_name)
+            if not entries:
+                continue
+            hora = registro.get(f"patron_{var_name}_hora", '') or ''
+            alim = registro.get(f"patron_{var_name}_alimentos", '') or ''
+            entries[0].insert(0, hora)
+            entries[1].insert(0, alim)
+
+        self.ha_apetito.set(inv_apetito.get(registro.get('apetito', ''), 'Bueno'))
+        self.ha_apetito_comentarios.insert(0, registro.get('apetito_comentarios', '') or '')
+        self.ha_comidas_familia.set(inv_familia.get(registro.get('comidas_familia', ''), 'A veces'))
+        self.ha_ambiente.set(inv_ambiente.get(registro.get('ambiente_agradable', ''), 'Sí'))
+        self.ha_ambiente_dificultades.insert(0, registro.get('ambiente_dificultades', '') or '')
+
+        self.ha_leche_cantidad.insert(0, registro.get('leche_cantidad', '') or '')
+        self.ha_leche_tipo.insert(0, registro.get('leche_tipo', '') or '')
+        self.ha_jugo_cantidad.insert(0, registro.get('jugo_cantidad', '') or '')
+        self.ha_snacks_freq.set(inv_snacks.get(registro.get('snacks_frecuencia', ''), 'Nunca'))
+        self.ha_snacks_tipo.insert(0, registro.get('snacks_tipo', '') or '')
+
+        self.ha_alergias.set(inv_alergias.get(registro.get('alergias', ''), 'No'))
+        self.ha_alergias_detalle.insert(0, registro.get('alergias_detalle', '') or '')
+        self.ha_suplemento.insert(0, registro.get('suplemento_vitaminico', '') or '')
+        self.ha_otros_comentarios.insert(0, registro.get('otros_comentarios', '') or '')
 
     def _cargar_historia_alimentaria(self):
         try:

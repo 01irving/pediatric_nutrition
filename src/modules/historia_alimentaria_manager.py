@@ -56,6 +56,43 @@ class HistoriaAlimentariaManager:
         self.db.commit()
         return cursor.lastrowid
 
+    def actualizar(self, historial_id: int, fecha_evaluacion: date, evaluador: str,
+                   datos: Dict[str, Any]):
+        """Actualiza un registro existente de historia alimentaria."""
+        campos = [
+            'tipo_alimentacion',
+            'lm_frecuencia', 'lm_duracion_minutos', 'lm_posicion_tecnica',
+            'lm_suplementos', 'lm_suplementos_detalle',
+            'fi_tipo_formula', 'fi_preparacion', 'fi_kcal_100ml',
+            'fi_preparacion_fresca', 'fi_tomas_24h', 'fi_frecuencia',
+            'fi_volumen_ofrecido', 'fi_volumen_real', 'fi_duracion_toma',
+            'fi_adicional', 'fi_adicional_detalle',
+            'comidas_snacks_dia', 'lugar_comidas',
+            'patron_desayuno_hora', 'patron_desayuno_alimentos',
+            'patron_merienda_manana_hora', 'patron_merienda_manana_alimentos',
+            'patron_almuerzo_hora', 'patron_almuerzo_alimentos',
+            'patron_merienda_tarde_hora', 'patron_merienda_tarde_alimentos',
+            'patron_cena_hora', 'patron_cena_alimentos',
+            'patron_otra_merienda_hora', 'patron_otra_merienda_alimentos',
+            'apetito', 'apetito_comentarios',
+            'comidas_familia', 'ambiente_agradable', 'ambiente_dificultades',
+            'leche_cantidad', 'leche_tipo', 'jugo_cantidad',
+            'snacks_frecuencia', 'snacks_tipo',
+            'alergias', 'alergias_detalle', 'suplemento_vitaminico', 'otros_comentarios'
+        ]
+        sets = ", ".join(f"{c} = ?" for c in campos)
+        sets += ", fecha_evaluacion = ?, evaluador = ?"
+        valores = []
+        for c in campos:
+            v = datos.get(c, '')
+            if isinstance(v, bool):
+                v = 1 if v else 0
+            valores.append(v)
+        valores += [fecha_evaluacion.isoformat(), evaluador, historial_id]
+        self.db.execute(
+            f"UPDATE historia_alimentaria SET {sets} WHERE id = ?", tuple(valores))
+        self.db.commit()
+
     def obtener(self, historial_id: int) -> Optional[Dict[str, Any]]:
         """Obtiene un registro de historia alimentaria por ID."""
         row = self.db.fetchone(

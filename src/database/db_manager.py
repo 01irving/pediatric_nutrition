@@ -204,11 +204,30 @@ class DatabaseManager:
                 FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
             );
 
+            -- Tabla de seguimiento de crecimiento (historial evolutivo por paciente)
+            CREATE TABLE IF NOT EXISTS seguimiento_crecimiento (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER NOT NULL,
+                fecha_visita DATE NOT NULL,
+                peso_kg REAL,
+                talla_cm REAL,
+                tipo_medicion TEXT,
+                pc_cm REAL,
+                muac_mm REAL,
+                imc REAL,
+                observaciones TEXT,
+                edad_meses_decimal REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
+            );
+
             -- Índices
             CREATE INDEX IF NOT EXISTS idx_pacientes_nombre ON pacientes(nombre);
             CREATE INDEX IF NOT EXISTS idx_historia_paciente ON historia_alimentaria(paciente_id, fecha_evaluacion);
             CREATE INDEX IF NOT EXISTS idx_historia_medica_paciente ON historia_medica(paciente_id, fecha_evaluacion);
             CREATE INDEX IF NOT EXISTS idx_laboratorios_paciente ON laboratorios(paciente_id, fecha_toma);
             CREATE INDEX IF NOT EXISTS idx_antropometria_paciente ON evaluaciones_antropometricas(paciente_id, fecha_visita);
+            CREATE INDEX IF NOT EXISTS idx_seguimiento_paciente ON seguimiento_crecimiento(paciente_id, fecha_visita);
         """)
         self.commit()

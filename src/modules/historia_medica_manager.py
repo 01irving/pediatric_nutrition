@@ -37,6 +37,30 @@ class HistoriaMedicaManager:
         self.db.commit()
         return cursor.lastrowid
 
+    def actualizar(self, historia_id: int, fecha_evaluacion: date, evaluador: str,
+                   datos: Dict[str, str]):
+        """Actualiza un registro existente de historia médica."""
+        self.db.execute(
+            """UPDATE historia_medica SET
+                fecha_evaluacion = ?, evaluador = ?,
+                motivo_consulta = ?, diagnosticos_actuales = ?,
+                antecedentes_personales = ?, antecedentes_familiares = ?,
+                cirugias_hospitalizaciones = ?, medicamentos_suplementos = ?,
+                alergias_intolerancias = ?, observaciones_medicas = ?
+             WHERE id = ?""",
+            (fecha_evaluacion.isoformat(), evaluador,
+             datos.get('motivo_consulta', ''),
+             datos.get('diagnosticos_actuales', ''),
+             datos.get('antecedentes_personales', ''),
+             datos.get('antecedentes_familiares', ''),
+             datos.get('cirugias_hospitalizaciones', ''),
+             datos.get('medicamentos_suplementos', ''),
+             datos.get('alergias_intolerancias', ''),
+             datos.get('observaciones_medicas', ''),
+             historia_id)
+        )
+        self.db.commit()
+
     def obtener(self, historia_id: int) -> Optional[Dict[str, Any]]:
         """Obtiene un registro de historia médica por ID."""
         row = self.db.fetchone(

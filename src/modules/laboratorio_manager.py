@@ -30,6 +30,23 @@ class LaboratorioManager:
         self.db.commit()
         return cursor.lastrowid
 
+    def actualizar(self, resultado_id: int, fecha_toma: date, tipo_prueba: str,
+                   valor: str, unidad: str, edad_meses: Optional[float],
+                   clasificacion: str, rango_referencia: str,
+                   observaciones: str = ""):
+        """Actualiza un resultado de laboratorio existente."""
+        self.db.execute(
+            """UPDATE laboratorios SET
+                fecha_toma = ?, tipo_prueba = ?, valor = ?, unidad = ?,
+                edad_meses_al_momento = ?, resultado_clasificacion = ?,
+                rango_referencia = ?, observaciones = ?
+             WHERE id = ?""",
+            (fecha_toma.isoformat(), tipo_prueba, valor, unidad,
+             edad_meses, clasificacion, rango_referencia, observaciones,
+             resultado_id)
+        )
+        self.db.commit()
+
     def obtener(self, resultado_id: int) -> Optional[Dict[str, Any]]:
         row = self.db.fetchone("SELECT * FROM laboratorios WHERE id = ?", (resultado_id,))
         return dict(row) if row else None
