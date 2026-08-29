@@ -101,6 +101,8 @@ class MainWindow:
         self.historia_mgr = HistoriaAlimentariaManager(self.db)
         self.historia_med_mgr = HistoriaMedicaManager(self.db)
         self.laboratorio_mgr = LaboratorioManager(self.db)
+        from src.modules.antropometria_manager import AntropometriaManager
+        self.antropometria_mgr = AntropometriaManager(self.db)
 
         self._configurar_estilo()
         self._crear_barra_superior()
@@ -801,6 +803,8 @@ class MainWindow:
         btn_frame.pack(fill=tk.X, padx=10, pady=5)
         ttk.Button(btn_frame, text="Evaluar", style='Primary.TButton', command=self._ant_evaluar).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Ubicar en Gráfica", command=self._ant_ubicar_grafica).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Guardar", command=self._ant_guardar).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cargar/Editar", command=self._ant_cargar_evaluacion).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Limpiar", command=self._ant_limpiar).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
@@ -832,6 +836,7 @@ class MainWindow:
         self.ant_resultado_text.config(state=tk.DISABLED)
 
         self._resultado_actual = None
+        self._ant_paciente_actual = None
         self._ant_cambiar_indicador()
 
     # ==================================================================
@@ -1084,6 +1089,8 @@ class MainWindow:
             messagebox.showerror("Error", "Paciente no encontrado.")
             return
 
+        self._ant_paciente_actual = pid
+
         self.ant_nombre.config(state='normal')
         self.ant_nombre.delete(0, tk.END)
         self.ant_nombre.insert(0, paciente['nombre'])
@@ -1199,6 +1206,156 @@ class MainWindow:
         self._resultado_actual = resultado
         self._ant_mostrar_indicador()
         self.status_var.set("Evaluación antropométrica completada — WHO Anthro")
+
+    def _ant_guardar(self):
+        """Guarda la evaluación antropométrica actual del paciente en la BD."""
+        from datetime import date as date_cls
+        r = self._resultado_actual
+        pid = self._ant_paciente_actual
+        if pid is None:
+            try:
+                pid = int(self.ant_paciente_id.get().strip())
+            except (ValueError, TypeError):
+                messagebox.showerror("Error", "Cargue primero un paciente para guardar.")
+                return
+        if r is None:
+            messagebox.showwarning("Aviso", "Primero presione 'Evaluar' para generar resultados.")
+            return
+
+        try:
+            fecha_visita = _parsear_fecha(self.ant_fecha_visita.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
+            return
+
+        tipo_med = "L" if "Dec" in self.ant_tipo_med.get() else "H"
+        campos = {
+            "peso_kg": r.get("peso_kg"),
+            "talla_cm": r.get("talla_original_cm"),
+            "tipo_medicion": tipo_med,
+            "edema": 1 if r.get("edema") else 0,
+            "pc_cm": r.get("pc_cm"),
+            "muac_mm": r.get("muac_mm"),
+            "pliegue_triceps_mm": r.get("pliegue_triceps_mm"),
+            "pliegue_subescapular_mm": r.get("pliegue_subescapular_mm"),
+            "edad_dias": r.get("edad_dias"),
+            "edad_meses_completos": r.get("edad_meses_completos"),
+            "edad_meses_decimal": r.get("edad_meses_decimal"),
+        }
+        for key in self.INDICADORES_MAP:
+            zk, pk, ck, fk = self.INDICADORES_MAP[key]
+            campos[zk] = r.get(zk)
+            campos[pk] = r.get(pk)
+            campos[ck] = r.get(ck)
+            if fk:
+                campos[fk] = r.get(fk)
+
+        try:
+            evaluacion_id = self.antropometria_mgr.guardar(
+                pid, fecha_visita, "", campos)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {e}")
+            return
+        messagebox.showinfo("Guardado",
+                            f"Evaluación guardada (ID {evaluacion_id}) para el paciente {pid}.")
+        self.status_var.set(f"Evaluación guardada (ID {evaluacion_id})")
+
+    def _ant_cargar_evaluacion(self):
+        """Permite seleccionar y cargar una evaluación previa del paciente para editarla."""
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            messagebox.showerror("Error", "Ingrese/cargue primero un ID de paciente.")
+            return
+        lista = self.antropometria_mgr.listar_por_paciente(pid)
+        if not lista:
+            try:
+                pid = self._ant_paciente_actual
+            except Exception:
+                pass
+            lista = self.antropometria_mgr.listar_por_paciente(pid) if pid else []
+            if not lista:
+                messagebox.showinfo("Sin registros", "No hay evaluaciones guardadas para este paciente.")
+                return
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Evaluaciones del paciente {pid}")
+        ventana.geometry("640x380")
+        ventana.transient(self.root)
+
+        ttk.Label(ventana, text="Seleccione una evaluación para cargar y editar:",
+                  font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, padx=10, pady=8)
+
+        tree = ttk.Treeview(ventana, columns=("fecha", "edad", "peso", "talla", "pc", "z"),
+                            show="headings", height=10)
+        tree.heading("fecha", text="Fecha visita")
+        tree.heading("edad", text="Edad (meses)")
+        tree.heading("peso", text="Peso (kg)")
+        tree.heading("talla", text="Talla (cm)")
+        tree.heading("pc", text="PC (cm)")
+        tree.heading("z", text="Z lhfa")
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        tree.column("fecha", width=100, anchor=tk.W)
+        tree.column("edad", width=80, anchor=tk.CENTER)
+        tree.column("peso", width=80, anchor=tk.CENTER)
+        tree.column("talla", width=80, anchor=tk.CENTER)
+        tree.column("pc", width=80, anchor=tk.CENTER)
+        tree.column("z", width=80, anchor=tk.CENTER)
+
+        for ev in lista:
+            zval = ev.get("z_lhfa")
+            ztxt = f"{zval:+.2f}" if zval is not None else "N/A"
+            tree.insert("", tk.END, iid=str(ev["id"]), values=(
+                _mostrar_fecha(ev["fecha_visita"]),
+                ev.get("edad_meses_decimal") or "",
+                ev.get("peso_kg") or "",
+                ev.get("talla_cm") or "",
+                ev.get("pc_cm") or "",
+                ztxt,
+            ))
+
+        def _cargar_seleccionada():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("Aviso", "Seleccione una evaluación.")
+                return
+            ev_id = int(sel[0])
+            ev = self.antropometria_mgr.obtener(ev_id)
+            if not ev:
+                messagebox.showerror("Error", "No se encontró la evaluación.")
+                return
+            self._ant_paciente_actual = pid
+            self.ant_paciente_id.delete(0, tk.END)
+            self.ant_paciente_id.insert(0, str(pid))
+            self._ant_cargar_paciente()
+
+            self.ant_fecha_visita.delete(0, tk.END)
+            self.ant_fecha_visita.insert(0, _mostrar_fecha(ev["fecha_visita"]))
+
+            def _set(entry, val):
+                entry.delete(0, tk.END)
+                if val is not None:
+                    entry.insert(0, str(val))
+            _set(self.ant_peso, ev.get("peso_kg"))
+            _set(self.ant_talla, ev.get("talla_cm"))
+            _set(self.ant_pc, ev.get("pc_cm"))
+            _set(self.ant_muac, ev.get("muac_mm"))
+            _set(self.ant_pliegue, ev.get("pliegue_triceps_mm"))
+            _set(self.ant_pliegue_sub, ev.get("pliegue_subescapular_mm"))
+
+            tipo = ev.get("tipo_medicion") or "L"
+            self.ant_tipo_med.set("Decúbito (L)" if tipo == "L" else "Bipedestación (H)")
+            self.ant_edema.set("si" if ev.get("edema") else "no")
+
+            ventana.destroy()
+            messagebox.showinfo("Cargado",
+                                "Evaluación cargada. Edite los campos y presione 'Evaluar' y luego 'Guardar'.")
+
+        btn_row = ttk.Frame(ventana)
+        btn_row.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(btn_row, text="Cargar seleccionada", style='Primary.TButton',
+                   command=_cargar_seleccionada).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_row, text="Cancelar", command=ventana.destroy).pack(side=tk.LEFT, padx=5)
 
     INDICADORES_MAP = {
         "lhfa": ("z_lhfa", "perc_lhfa", "clasif_lhfa", "flag_lhfa"),
@@ -1521,6 +1678,7 @@ class MainWindow:
         self.ant_fecha_visita.delete(0, tk.END)
         self.ant_fecha_visita.insert(0, date.today().strftime("%d-%m-%Y"))
         self._resultado_actual = None
+        self._ant_paciente_actual = None
         self.ant_resultado_text.config(state='normal')
         self.ant_resultado_text.delete("1.0", tk.END)
         self.ant_resultado_text.insert("1.0", "Ingrese datos y presione 'Evaluar' para ver resultados.")

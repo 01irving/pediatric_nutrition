@@ -236,6 +236,8 @@ def evaluar_antropometria(
         "conversion_l_h": conversion,
         "peso_kg": peso_kg,
         "edema": edema,
+        "pc_cm": pc_cm,
+        "muac_mm": muac_mm,
         "imc": bmi_val,
         "z_lhfa": round(z_lhfa, 2) if z_lhfa is not None else None,
         "z_wfa": round(z_wfa, 2) if z_wfa is not None else None,

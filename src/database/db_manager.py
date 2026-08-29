@@ -171,10 +171,44 @@ class DatabaseManager:
                 FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
             );
 
+            -- Tabla de evaluaciones antropométricas (mediciones + z-scores calculados)
+            CREATE TABLE IF NOT EXISTS evaluaciones_antropometricas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER NOT NULL,
+                fecha_visita DATE NOT NULL,
+                evaluador TEXT,
+                -- Mediciones
+                peso_kg REAL,
+                talla_cm REAL,
+                tipo_medicion TEXT,
+                edema INTEGER DEFAULT 0,
+                pc_cm REAL,
+                muac_mm REAL,
+                pliegue_triceps_mm REAL,
+                pliegue_subescapular_mm REAL,
+                -- Edad calculada
+                edad_dias INTEGER,
+                edad_meses_completos INTEGER,
+                edad_meses_decimal REAL,
+                -- Resultados (z-scores)
+                z_lhfa REAL, perc_lhfa REAL, clasif_lhfa TEXT, flag_lhfa INTEGER,
+                z_wfa REAL, perc_wfa REAL, clasif_wfa TEXT, flag_wfa INTEGER,
+                z_wflh REAL, perc_wflh REAL, clasif_wflh TEXT, flag_wflh INTEGER,
+                z_bmi REAL, perc_bmi REAL, clasif_bmi TEXT, flag_bmi INTEGER,
+                z_pc REAL, perc_pc REAL, clasif_pc TEXT,
+                z_acfa REAL, perc_acfa REAL, clasif_muac TEXT, flag_acfa INTEGER,
+                z_tsfa REAL, perc_tsfa REAL, clasif_tsfa TEXT,
+                z_ssfa REAL, perc_ssfa REAL, clasif_ssfa TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE
+            );
+
             -- Índices
             CREATE INDEX IF NOT EXISTS idx_pacientes_nombre ON pacientes(nombre);
             CREATE INDEX IF NOT EXISTS idx_historia_paciente ON historia_alimentaria(paciente_id, fecha_evaluacion);
             CREATE INDEX IF NOT EXISTS idx_historia_medica_paciente ON historia_medica(paciente_id, fecha_evaluacion);
             CREATE INDEX IF NOT EXISTS idx_laboratorios_paciente ON laboratorios(paciente_id, fecha_toma);
+            CREATE INDEX IF NOT EXISTS idx_antropometria_paciente ON evaluaciones_antropometricas(paciente_id, fecha_visita);
         """)
         self.commit()
