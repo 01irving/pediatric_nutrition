@@ -55,6 +55,42 @@ class PatientManager:
             return str(paciente['id'])
         return f"{paciente['parent_id']}.{paciente['version']}"
 
+    def resolver_id_a_database_id(self, id_input: str) -> Optional[int]:
+        """
+        Convierte un ID display (como '1.2') o un ID directo a un ID de base de datos.
+        Si es '1.2', busca el paciente donde parent_id=1 y version=2.
+        Si es '1', busca el paciente donde id=1.
+        Retorna el ID de base de datos o None si no existe.
+        """
+        id_input = id_input.strip()
+        
+        # Intenta como número directo primero
+        try:
+            pid = int(id_input)
+            if self.obtener_paciente(pid):
+                return pid
+            return None
+        except ValueError:
+            pass
+        
+        # Intenta como display_id (formato "parent.version")
+        if "." in id_input:
+            try:
+                parts = id_input.split(".")
+                if len(parts) == 2:
+                    parent_id = int(parts[0])
+                    version = int(parts[1])
+                    row = self.db.fetchone(
+                        "SELECT id FROM pacientes WHERE parent_id = ? AND version = ?",
+                        (parent_id, version)
+                    )
+                    if row:
+                        return row[0]
+            except (ValueError, IndexError):
+                pass
+        
+        return None
+
     def obtener_paciente(self, paciente_id: int) -> Optional[Dict[str, Any]]:
         row = self.db.fetchone(
             "SELECT * FROM pacientes WHERE id = ?", (paciente_id,)

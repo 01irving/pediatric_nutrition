@@ -627,10 +627,9 @@ class MainWindow:
 
     def _hm_cargar_paciente(self):
         """Carga datos del paciente en la pestaña historia médica."""
-        try:
-            pid = int(self.hm_paciente_id.get().strip())
-        except (ValueError, TypeError):
-            messagebox.showerror("Error", "Ingrese un ID válido.")
+        pid = self.patient_mgr.resolver_id_a_database_id(self.hm_paciente_id.get())
+        if pid is None:
+            messagebox.showerror("Error", "Ingrese un ID válido (ej: 1 o 1.2).")
             return
 
         paciente = self.patient_mgr.obtener_paciente(pid)
@@ -1057,10 +1056,9 @@ class MainWindow:
 
     def _lab_cargar_paciente(self):
         """Carga datos del paciente en la pestaña de laboratorios."""
-        try:
-            pid = int(self.lab_paciente_id.get().strip())
-        except (ValueError, TypeError):
-            messagebox.showerror("Error", "Ingrese un ID válido.")
+        pid = self.patient_mgr.resolver_id_a_database_id(self.lab_paciente_id.get())
+        if pid is None:
+            messagebox.showerror("Error", "Ingrese un ID válido (ej: 1 o 1.2).")
             return
 
         paciente = self.patient_mgr.obtener_paciente(pid)
@@ -1245,10 +1243,9 @@ class MainWindow:
         self.status_var.set("Edición de laboratorio cancelada.")
 
     def _ant_cargar_paciente(self):
-        try:
-            pid = int(self.ant_paciente_id.get().strip())
-        except (ValueError, TypeError):
-            messagebox.showerror("Error", "Ingrese un ID válido.")
+        pid = self.patient_mgr.resolver_id_a_database_id(self.ant_paciente_id.get())
+        if pid is None:
+            messagebox.showerror("Error", "Ingrese un ID válido (ej: 1 o 1.2).")
             return
         paciente = self.patient_mgr.obtener_paciente(pid)
         if not paciente:
