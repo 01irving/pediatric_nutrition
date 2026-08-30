@@ -62,6 +62,47 @@ def test_requerimientos():
     assert req['carbohidratos_g'] > 0
 
 
+def test_antropometria_sin_anthro(monkeypatch):
+    """Verifica que la evaluación funciona sin la dependencia externa anthro."""
+    import importlib
+    import sys
+
+    sys.modules.pop('src.modules.who_anthro_calc', None)
+    monkeypatch.setitem(sys.modules, 'anthro', None)
+
+    module = importlib.import_module('src.modules.who_anthro_calc')
+    r = module.evaluar_antropometria(
+        sexo='M',
+        fecha_nacimiento=date(2024, 1, 1),
+        fecha_visita=date(2024, 2, 1),
+        peso_kg=8.5,
+        talla_cm=68,
+        pc_cm=40,
+    )
+
+    assert r['edad_dias'] == 31
+    assert r['z_pc'] is not None
+    assert r['errores'] == []
+
+
+def test_paciente_seguimiento_versionado(tmp_path):
+    """Verifica que cada seguimiento se conserva como registro separado con ID compuesto."""
+    from src.database.db_manager import DatabaseManager
+    from src.modules.patient_manager import PatientManager
+
+    db = DatabaseManager(str(tmp_path / 'seguimiento.db'))
+    db.connect()
+    db.create_tables()
+
+    pm = PatientManager(db)
+    base_id = pm.agregar_paciente('Ana', date(2020, 1, 1), 'F', 12.0, 85.0)
+    follow_id = pm.agregar_seguimiento(base_id, 'Ana', date(2020, 1, 1), 'F', 13.0, 86.0)
+
+    assert pm.obtener_display_id(base_id) == f'{base_id}.1'
+    assert pm.obtener_display_id(follow_id) == f'{base_id}.2'
+    assert len(pm.listar_pacientes()) == 2
+
+
 if __name__ == "__main__":
     test_edad_meses()
     test_imc()

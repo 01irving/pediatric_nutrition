@@ -9,7 +9,11 @@ import os
 import tkinter as tk
 from typing import Dict, List, Optional, Tuple
 
-from anthro import lms_z
+try:
+    from anthro import lms_z
+except ModuleNotFoundError:  # pragma: no cover - fallback para entornos sin anthro
+    def lms_z(*args, **kwargs):
+        raise RuntimeError("La dependencia 'anthro' no está disponible; la generación de gráficos no puede ejecutarse.")
 
 DAYS_PER_MONTH = 30.4375
 

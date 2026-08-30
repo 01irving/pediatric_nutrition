@@ -172,18 +172,20 @@ class MainWindow:
         self._bloquear_pestanas()
 
     def _bloquear_pestanas(self):
-        """Deshabilita las pestañas de captura hasta seleccionar un paciente."""
+        """Mantiene habilitadas todas las pestañas para permitir trabajar sin seleccionar un paciente."""
         self.pestanas_entrada = []
         for tid in self.notebook.tabs():
             texto = self.notebook.tab(tid, "text")
             if "Pacientes" not in texto:
-                self.notebook.tab(tid, state='disabled')
+                self.notebook.tab(tid, state='normal')
                 self.pestanas_entrada.append(tid)
 
     def _habilitar_pestanas(self):
-        """Habilita todas las pestañas de captura tras seleccionar un paciente."""
-        for tid in self.pestanas_entrada:
-            self.notebook.tab(tid, state='normal')
+        """Habilita todas las pestañas de captura."""
+        for tid in self.notebook.tabs():
+            texto = self.notebook.tab(tid, "text")
+            if "Pacientes" not in texto:
+                self.notebook.tab(tid, state='normal')
 
     # ==================================================================
     # PESTAÑA 1: PACIENTES
@@ -194,7 +196,7 @@ class MainWindow:
         parent = frame.inner
 
         ttk.Label(parent, text="Gestión de Pacientes", style='Title.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Label(parent, text="Administre pacientes y su seguimiento de crecimiento. Seleccione un paciente para habilitar las demás pestañas.",
+        ttk.Label(parent, text="Administre pacientes y su seguimiento de crecimiento. Las demás pestañas quedan disponibles para trabajar sin necesidad de seleccionar un paciente.",
                   style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
@@ -216,6 +218,10 @@ class MainWindow:
         self.combo_sexo = ttk.Combobox(row2, values=["M", "F"], width=5, state="readonly")
         self.combo_sexo.pack(side=tk.LEFT, padx=5)
         self.combo_sexo.set("M")
+        ttk.Label(row2, text="Fecha actual:").pack(side=tk.LEFT, padx=5)
+        self.entry_fecha_actual = ttk.Entry(row2, width=12)
+        self.entry_fecha_actual.pack(side=tk.LEFT, padx=5)
+        self.entry_fecha_actual.insert(0, date.today().strftime("%d-%m-%Y"))
 
         row3 = ttk.Frame(form_frame)
         row3.pack(fill=tk.X, pady=2)
@@ -228,7 +234,8 @@ class MainWindow:
 
         btn_frame = ttk.Frame(form_frame)
         btn_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(btn_frame, text="Guardar Paciente", style='Primary.TButton', command=self._guardar_paciente).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Guardar", style='Primary.TButton', command=self._guardar_paciente).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Seguir", command=self._seguir_paciente).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Nuevo", command=self._limpiar_formulario).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Eliminar", command=self._eliminar_paciente).pack(side=tk.LEFT, padx=5)
 
@@ -243,18 +250,20 @@ class MainWindow:
         ttk.Button(search_frame, text="Buscar", command=self._buscar_pacientes).pack(side=tk.LEFT, padx=5)
         ttk.Button(search_frame, text="Todos", command=self._cargar_pacientes).pack(side=tk.LEFT, padx=5)
 
-        cols = ("ID", "Nombre completo", "Nacimiento", "Sexo", "Peso", "Talla")
+        cols = ("ID", "Nombre completo", "Nacimiento", "Sexo", "Peso", "Talla", "Seguir")
         self.tree_pacientes = ttk.Treeview(parent, columns=cols, show='headings', height=7)
         for c in cols:
             self.tree_pacientes.heading(c, text=c)
             self.tree_pacientes.column(c, width=140, anchor=tk.CENTER)
         self.tree_pacientes.column("ID", width=50)
         self.tree_pacientes.column("Nombre completo", width=250, anchor=tk.W)
+        self.tree_pacientes.column("Seguir", width=70, anchor=tk.CENTER)
         scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.tree_pacientes.yview)
         self.tree_pacientes.configure(yscrollcommand=scrollbar.set)
         self.tree_pacientes.pack(fill=tk.X, side=tk.LEFT, padx=5)
         scrollbar.pack(fill=tk.Y, side=tk.RIGHT)
         self.tree_pacientes.bind("<<TreeviewSelect>>", self._seleccionar_paciente)
+        self.tree_pacientes.bind("<Button-1>", self._clic_pacientes)
 
         self._cargar_pacientes()
 
@@ -1869,31 +1878,80 @@ class MainWindow:
         if getattr(self, 'paciente_seleccionado', None):
             pid = self.paciente_seleccionado
             self.patient_mgr.actualizar_paciente(pid, nombre, fecha_dt, sexo, peso_f, talla_f)
-            msg = f"Paciente {nombre} (ID {pid}) actualizado correctamente."
+            msg = f"Paciente {nombre} (ID {self.patient_mgr.obtener_display_id(pid)}) actualizado correctamente."
         else:
             pid = self.patient_mgr.agregar_paciente(nombre, fecha_dt, sexo, peso_f, talla_f)
-            msg = f"Paciente {nombre} registrado con ID {pid}"
+            msg = f"Paciente {nombre} registrado con ID {self.patient_mgr.obtener_display_id(pid)}"
         self.status_var.set(msg)
         messagebox.showinfo("Éxito", msg)
         self.paciente_seleccionado = None
         self._limpiar_formulario()
         self._cargar_pacientes()
 
+    def _seguir_paciente(self):
+        nombre = self.entry_nombre.get().strip()
+        fecha_nac = self.entry_fecha_nac.get().strip()
+        sexo = self.combo_sexo.get()
+        peso = self.entry_peso.get().strip()
+        talla = self.entry_talla.get().strip()
+        fecha_actual = self.entry_fecha_actual.get().strip() or date.today().strftime("%d-%m-%Y")
+
+        if not nombre or not fecha_nac:
+            messagebox.showwarning("Campos requeridos", "Completa nombre y fecha de nacimiento antes de crear un seguimiento.")
+            return
+
+        try:
+            fecha_dt = _parsear_fecha(fecha_nac)
+            fecha_hoy = _parsear_fecha(fecha_actual)
+        except ValueError:
+            messagebox.showerror("Error", "Formato de fecha inválido. Use DD-MM-AAAA.")
+            return
+
+        base_id = getattr(self, 'paciente_seleccionado', None)
+        if not base_id:
+            base_id = self.patient_mgr.agregar_paciente(nombre, fecha_dt, sexo, float(peso) if peso else 0.0, float(talla) if talla else 0.0)
+            self.paciente_seleccionado = base_id
+
+        follow_id = self.patient_mgr.agregar_seguimiento(
+            base_id,
+            nombre,
+            fecha_dt,
+            sexo,
+            float(peso) if peso else 0.0,
+            float(talla) if talla else 0.0,
+        )
+        display_id = self.patient_mgr.obtener_display_id(follow_id)
+        self.status_var.set(f"Seguimiento creado para {nombre} con ID {display_id}")
+        messagebox.showinfo("Seguimiento", f"Se creó la ficha de seguimiento {display_id} para {nombre}.")
+        self.paciente_seleccionado = follow_id
+        self._limpiar_formulario()
+        self._cargar_pacientes()
+        self.entry_fecha_actual.delete(0, tk.END)
+        self.entry_fecha_actual.insert(0, fecha_hoy.strftime("%d-%m-%Y"))
+        self.entry_nombre.insert(0, nombre)
+        self.entry_fecha_nac.insert(0, fecha_nac)
+        self.combo_sexo.set(sexo)
+
     def _limpiar_formulario(self):
-        for e in [self.entry_nombre, self.entry_fecha_nac, self.entry_peso, self.entry_talla]:
+        for e in [self.entry_nombre, self.entry_fecha_nac, self.entry_peso, self.entry_talla, self.entry_fecha_actual]:
             e.delete(0, tk.END)
         self.combo_sexo.set("M")
+        self.entry_fecha_actual.insert(0, date.today().strftime("%d-%m-%Y"))
         self.paciente_seleccionado = None
 
     def _cargar_pacientes(self):
         for item in self.tree_pacientes.get_children():
             self.tree_pacientes.delete(item)
+        self._paciente_row_ids = {}
         pacientes = self.patient_mgr.listar_pacientes()
         for p in pacientes:
-            self.tree_pacientes.insert("", tk.END, values=(
-                p['id'], p['nombre'],
-                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm']
+            display_id = self.patient_mgr.obtener_display_id(p['id'])
+            item = self.tree_pacientes.insert("", tk.END, values=(
+                display_id, p['nombre'],
+                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm'],
+                "Seguir"
             ))
+            self._paciente_row_ids[item] = p['id']
         self.status_var.set(f"{len(pacientes)} paciente(s) registrado(s)")
 
     def _buscar_pacientes(self):
@@ -1903,20 +1961,59 @@ class MainWindow:
             return
         for item in self.tree_pacientes.get_children():
             self.tree_pacientes.delete(item)
+        self._paciente_row_ids = {}
         pacientes = self.patient_mgr.buscar_pacientes(termino)
         for p in pacientes:
-            self.tree_pacientes.insert("", tk.END, values=(
-                p['id'], p['nombre'],
-                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm']
+            display_id = self.patient_mgr.obtener_display_id(p['id'])
+            item = self.tree_pacientes.insert("", tk.END, values=(
+                display_id, p['nombre'],
+                _mostrar_fecha(p['fecha_nacimiento']), p['sexo'], p['peso_kg'], p['talla_cm'],
+                "Seguir"
             ))
+            self._paciente_row_ids[item] = p['id']
 
     def _seleccionar_paciente(self, event):
         sel = self.tree_pacientes.selection()
         if sel:
-            vals = self.tree_pacientes.item(sel[0], 'values')
-            self.paciente_seleccionado = int(vals[0])
+            actual_id = self._paciente_row_ids.get(sel[0])
+            if actual_id is None:
+                return
+            self.paciente_seleccionado = actual_id
             self._habilitar_pestanas()
             self._llenar_historia_desde_paciente(self.paciente_seleccionado)
+
+    def _clic_pacientes(self, event):
+        """Detecta clic en la columna 'Seguir' (7ª) de la lista de pacientes."""
+        col = self.tree_pacientes.identify_column(event.x)
+        row_id = self.tree_pacientes.identify_row(event.y)
+        if not row_id or col != "#7":
+            return
+        paciente_id = self._paciente_row_ids.get(row_id)
+        if paciente_id is None:
+            return
+        self._seguir_desde_lista(paciente_id)
+
+    def _seguir_desde_lista(self, paciente_id: int):
+        """Crea una nueva consulta (seguimiento) del paciente seleccionado en la lista."""
+        paciente = self.patient_mgr.obtener_paciente(paciente_id)
+        if not paciente:
+            messagebox.showerror("Error", "Paciente no encontrado.")
+            return
+        base_id = paciente['parent_id'] if paciente.get('parent_id') is not None else paciente['id']
+        fecha_nac = date.fromisoformat(paciente['fecha_nacimiento'])
+        follow_id = self.patient_mgr.agregar_seguimiento(
+            base_id, paciente['nombre'], fecha_nac, paciente['sexo'],
+            paciente['peso_kg'] or 0.0, paciente['talla_cm'] or 0.0,
+        )
+        display_id = self.patient_mgr.obtener_display_id(follow_id)
+        self.paciente_seleccionado = follow_id
+        self._habilitar_pestanas()
+        self._llenar_historia_desde_paciente(follow_id)
+        self._cargar_pacientes()
+        self.status_var.set(f"Consulta {display_id} creada para {paciente['nombre']}")
+        messagebox.showinfo("Seguimiento",
+                            f"Se abrió una nueva consulta {display_id} para {paciente['nombre']}.\n"
+                            "A partir de ahora registre el nuevo historial, antropometría y laboratorios en las pestañas.")
 
     def _llenar_historia_desde_paciente(self, paciente_id: int):
         """Llena los campos de Historia Alimentaria desde un paciente seleccionado."""

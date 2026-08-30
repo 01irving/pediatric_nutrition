@@ -65,6 +65,8 @@ class DatabaseManager:
             -- Tabla de pacientes (niños)
             CREATE TABLE IF NOT EXISTS pacientes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id INTEGER,
+                version INTEGER NOT NULL DEFAULT 1,
                 nombre TEXT NOT NULL,
                 fecha_nacimiento DATE NOT NULL,
                 sexo TEXT NOT NULL CHECK(sexo IN ('M', 'F')),
@@ -212,3 +214,17 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_antropometria_paciente ON evaluaciones_antropometricas(paciente_id, fecha_visita);
         """)
         self.commit()
+
+        # Migración de esquema para versiones anteriores sin parent_id/version.
+        try:
+            cols = self.connection.execute("PRAGMA table_info(pacientes)").fetchall()
+            existing = {col[1] for col in cols}
+            if 'parent_id' not in existing:
+                self.connection.execute("ALTER TABLE pacientes ADD COLUMN parent_id INTEGER")
+            if 'version' not in existing:
+                self.connection.execute("ALTER TABLE pacientes ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+            self.connection.execute("UPDATE pacientes SET version = 1 WHERE version IS NULL OR version < 1")
+            self.connection.execute("UPDATE pacientes SET parent_id = id WHERE parent_id IS NULL")
+            self.connection.commit()
+        except Exception:
+            pass

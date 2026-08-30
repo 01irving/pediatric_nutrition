@@ -6,7 +6,11 @@ import math
 from datetime import date, timedelta
 from typing import Dict, Optional, Any, Tuple
 
-from anthro import compute as _anthro_compute, age_days as _anthro_age_days
+try:
+    from anthro import compute as _anthro_compute, age_days as _anthro_age_days
+except ModuleNotFoundError:  # pragma: no cover - fallback para entornos sin anthro
+    _anthro_compute = None
+    _anthro_age_days = None
 
 # ── Conversión Z-score → Percentil ───────────────────────────────────────────
 
@@ -85,7 +89,9 @@ def calcular_z_pc(sexo: str, edad_dias: int, pc_cm: float) -> Optional[float]:
 
 def calcular_edad(fecha_nacimiento: date, fecha_visita: date) -> int:
     """Edad en días según fórmula WHO: un año = 365.25 días, un mes = 30.4375 días."""
-    return _anthro_age_days(str(fecha_nacimiento), str(fecha_visita))
+    if _anthro_age_days is not None:
+        return _anthro_age_days(str(fecha_nacimiento), str(fecha_visita))
+    return (fecha_visita - fecha_nacimiento).days
 
 
 def calcular_edad_completada(fecha_nacimiento: date, fecha_visita: date) -> int:
@@ -168,11 +174,42 @@ def evaluar_antropometria(
     if muac_mm is not None:
         params["muac_mm"] = muac_mm
 
-    # Calcular con anthro
-    try:
-        resultado_anthro = _anthro_compute(params)
-    except Exception as e:
-        return _resultado_con_errores([f"Error en cálculo WHO: {e}"])
+    # Calcular con anthro si está disponible; si no, usar aproximación local.
+    if _anthro_compute is not None:
+        try:
+            resultado_anthro = _anthro_compute(params)
+        except Exception as e:
+            return _resultado_con_errores([f"Error en cálculo WHO: {e}"])
+    else:
+        from .nutrition_calcs import (
+            calcular_imc,
+            calcular_z_score_peso_edad,
+            calcular_z_score_talla_edad,
+            calcular_z_score_peso_talla,
+            calcular_z_score_imc_edad,
+        )
+
+        resultado_anthro = {
+            "z_lhfa": calcular_z_score_talla_edad(talla_cm, edad_meses, sexo) if talla_cm is not None else None,
+            "z_wfa": calcular_z_score_peso_edad(peso_kg, edad_meses, sexo) if peso_kg is not None else None,
+            "z_wflh": calcular_z_score_peso_talla(peso_kg, talla_cm, sexo) if peso_kg is not None and talla_cm is not None else None,
+            "z_bmi": calcular_z_score_imc_edad(calcular_imc(peso_kg, talla_cm), edad_meses) if peso_kg is not None and talla_cm is not None else None,
+            "z_acfa": None,
+            "lhfa": clasificar_z(resultado_anthro.get("z_lhfa")) if False else None,
+            "wfa": clasificar_z(resultado_anthro.get("z_wfa")) if False else None,
+            "wflh": clasificar_z(resultado_anthro.get("z_wflh")) if False else None,
+            "bmi": clasificar_z(resultado_anthro.get("z_bmi")) if False else None,
+            "acfa": "N/A",
+            "flag_lhfa": 0,
+            "flag_wfa": 0,
+            "flag_wflh": 0,
+            "flag_bmi": 0,
+            "flag_acfa": 0,
+            "bmi_val": round(peso_kg / ((talla_cm / 100.0) ** 2), 1) if peso_kg is not None and talla_cm is not None else None,
+            "height_cm_adj": talla_cm,
+            "measure_correction": None,
+            "warnings": ["anthro no disponible: se empleó cálculo aproximado local."],
+        }
 
     # Extraer resultados
     z_lhfa = resultado_anthro.get("z_lhfa")
@@ -182,10 +219,10 @@ def evaluar_antropometria(
     z_acfa = resultado_anthro.get("z_acfa")
 
     # Clasificaciones
-    clasif_lhfa = resultado_anthro.get("lhfa", "N/A")
-    clasif_wfa = resultado_anthro.get("wfa", "N/A")
-    clasif_wflh = resultado_anthro.get("wflh", "N/A")
-    clasif_bmi = resultado_anthro.get("bmi", "N/A")
+    clasif_lhfa = resultado_anthro.get("lhfa") if resultado_anthro.get("lhfa") is not None else (clasificar_z(z_lhfa) if z_lhfa is not None else "N/A")
+    clasif_wfa = resultado_anthro.get("wfa") if resultado_anthro.get("wfa") is not None else (clasificar_z(z_wfa) if z_wfa is not None else "N/A")
+    clasif_wflh = resultado_anthro.get("wflh") if resultado_anthro.get("wflh") is not None else (clasificar_z(z_wflh) if z_wflh is not None else "N/A")
+    clasif_bmi = resultado_anthro.get("bmi") if resultado_anthro.get("bmi") is not None else (clasificar_z(z_bmi) if z_bmi is not None else "N/A")
     clasif_muac = resultado_anthro.get("acfa", "N/A")
 
     # Banderas (flag limits WHO)
