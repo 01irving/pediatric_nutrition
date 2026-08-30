@@ -224,7 +224,7 @@ class DatabaseManager:
             if 'version' not in existing:
                 self.connection.execute("ALTER TABLE pacientes ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
             self.connection.execute("UPDATE pacientes SET version = 1 WHERE version IS NULL OR version < 1")
-            self.connection.execute("UPDATE pacientes SET parent_id = id WHERE parent_id IS NULL")
+            self.connection.execute("UPDATE pacientes SET parent_id = NULL WHERE parent_id = id AND version = 1")
             self.connection.commit()
         except Exception:
             pass

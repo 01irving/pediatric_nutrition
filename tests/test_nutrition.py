@@ -98,7 +98,7 @@ def test_paciente_seguimiento_versionado(tmp_path):
     base_id = pm.agregar_paciente('Ana', date(2020, 1, 1), 'F', 12.0, 85.0)
     follow_id = pm.agregar_seguimiento(base_id, 'Ana', date(2020, 1, 1), 'F', 13.0, 86.0)
 
-    assert pm.obtener_display_id(base_id) == f'{base_id}.1'
+    assert pm.obtener_display_id(base_id) == str(base_id)
     assert pm.obtener_display_id(follow_id) == f'{base_id}.2'
     assert len(pm.listar_pacientes()) == 2
 

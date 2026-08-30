@@ -22,13 +22,8 @@ class PatientManager:
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (None, 1, nombre, fecha_nacimiento.isoformat(), sexo, peso_kg, talla_cm)
         )
-        paciente_id = cursor.lastrowid
-        self.db.execute(
-            "UPDATE pacientes SET parent_id = id WHERE id = ?",
-            (paciente_id,)
-        )
         self.db.commit()
-        return paciente_id
+        return cursor.lastrowid
 
     def agregar_seguimiento(
         self, paciente_id: int, nombre: str,
@@ -56,7 +51,7 @@ class PatientManager:
         paciente = self.obtener_paciente(paciente_id)
         if not paciente:
             return str(paciente_id)
-        if paciente.get('parent_id') is None:
+        if paciente.get('parent_id') is None or paciente.get('parent_id') == paciente.get('id'):
             return str(paciente['id'])
         return f"{paciente['parent_id']}.{paciente['version']}"
 
