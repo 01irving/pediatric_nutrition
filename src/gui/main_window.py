@@ -1568,8 +1568,36 @@ class MainWindow:
         ("ssfa", "Pliegue Subescapular-Edad"),
     ]
 
+    def _edad_meses_actual(self) -> Optional[float]:
+        """Edad en meses del paciente cargado en el formulario de Antropometría."""
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            return None
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            return None
+        try:
+            from datetime import date as date_cls
+            nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            visita = _parsear_fecha(self.ant_fecha_visita.get().strip())
+        except (ValueError, TypeError):
+            return None
+        return (visita - nac).days / 30.4375
+
     def _ant_cambiar_indicador(self):
         codigo = self.ant_indicador_var.get()
+        # Indicadores no disponibles en la Referencia 2007 (AnthroPlus) para >5 años
+        invalidos_2007 = {"wflh", "hcfa", "acfa", "tsfa", "ssfa"}
+        edad_meses = self._edad_meses_actual()
+        if edad_meses is not None and edad_meses >= 60 and codigo in invalidos_2007:
+            messagebox.showwarning(
+                "Indicador no disponible para mayores de 5 años",
+                "Para pacientes mayores de 5 años la Referencia 2007 (AnthroPlus) solo "
+                "aplica para: Longitud/Altura-Edad, IMC-Edad y Peso-Edad (este último "
+                "solo hasta los 10 años).\n\n"
+                "Seleccione un indicador válido: 'Longitud/Altura-Edad', 'IMC-Edad' o 'Peso-Edad'."
+            )
         campos_requeridos = self.INDICADOR_CAMPOS.get(codigo, [])
         for attr_name in ["ant_peso", "ant_talla", "ant_tipo_med", "ant_pc",
                           "ant_muac", "ant_pliegue", "ant_pliegue_sub"]:
