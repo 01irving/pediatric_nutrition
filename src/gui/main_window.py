@@ -797,8 +797,8 @@ class MainWindow:
         self.notebook.add(scroll, text="  Antropometría  ")
         parent = scroll.inner
 
-        ttk.Label(parent, text="Calculadora Antropométrica OMS (WHO Anthro)", style='Title.TLabel').pack(anchor=tk.W, padx=5)
-        ttk.Label(parent, text="Z-scores y clasificaciones según WHO Child Growth Standards", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Calculadora Antropométrica OMS (0-19 años)", style='Title.TLabel').pack(anchor=tk.W, padx=5)
+        ttk.Label(parent, text="Estándares OMS 0-5 años + Referencia 2007 (AnthroPlus) para mayores de 5 años", style='Subtitle.TLabel').pack(anchor=tk.W, padx=5)
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
         # --- Datos del niño ---
@@ -1368,7 +1368,11 @@ class MainWindow:
 
         self._resultado_actual = resultado
         self._ant_mostrar_indicador()
-        self.status_var.set("Evaluación antropométrica completada — WHO Anthro")
+        if resultado.get('edad_meses_decimal') is not None and resultado['edad_meses_decimal'] >= 60:
+            ref = "Referencia 2007 (AnthroPlus)"
+        else:
+            ref = "Estándares OMS 0-5 años"
+        self.status_var.set(f"Evaluación antropométrica completada — {ref}")
 
     def _ant_guardar(self):
         """Guarda la evaluación antropométrica actual del paciente en la BD."""
