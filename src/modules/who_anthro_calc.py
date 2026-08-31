@@ -53,6 +53,53 @@ def clasificar_z(z: float) -> str:
 # WHO Child Growth Standards, Head-circumference-for-age, tablas LMS diarias
 # oficiales (0-1856 días). Fuente: WHO Child Growth Standards expanded LMS tables.
 from .hcfa_data import HC_LMS_BOYS_DAILY as _PC_LMS_BOYS, HC_LMS_GIRLS_DAILY as _PC_LMS_GIRLS
+from .who2007_data import (
+    HAZ_BOYS, HAZ_GIRLS, WAZ_BOYS, WAZ_GIRLS, BAZ_BOYS, BAZ_GIRLS,
+)
+
+
+# ── WHO Growth Reference 2007 (5-19 años) ───────────────────────────────────
+# La referencia 2007 (AnthroPlus) aplica de 61 a 228 meses. Estas tablas LMS
+# oficiales reemplazan a los estándares 0-5 años para niños mayores de 5 años.
+
+def _interpolar_lms(tabla, edad_meses: float):
+    """Interpola linealmente (L, M, S) para una edad en meses dentro de la tabla."""
+    meses = sorted(tabla.keys())
+    if not meses:
+        return None
+    if edad_meses <= meses[0]:
+        return tabla[meses[0]]
+    if edad_meses >= meses[-1]:
+        return tabla[meses[-1]]
+    for i in range(len(meses) - 1):
+        m1, m2 = meses[i], meses[i + 1]
+        if m1 <= edad_meses <= m2:
+            t = (edad_meses - m1) / (m2 - m1) if m2 != m1 else 0.0
+            L1, M1, S1 = tabla[m1]
+            L2, M2, S2 = tabla[m2]
+            return (L1 + t * (L2 - L1), M1 + t * (M2 - M1), S1 + t * (S2 - S1))
+    return tabla[meses[-1]]
+
+
+def calcular_z_2007(tabla, edad_meses: float, valor) -> Optional[float]:
+    """Z-score LMS de la referencia 2007: z = ((valor/M)^L - 1)/(L*S)."""
+    if valor is None:
+        return None
+    lms = _interpolar_lms(tabla, edad_meses)
+    if lms is None:
+        return None
+    L, M, S = lms
+    if not S or S == 0:
+        return None
+    try:
+        if abs(L) < 1e-10:
+            z = math.log(valor / M) / S
+        else:
+            z = ((valor / M) ** L - 1) / (L * S)
+    except (ZeroDivisionError, ValueError):
+        return None
+    return z
+
 
 
 def _interpolate_pc_lms(table, age_days: int) -> Optional[Tuple[float, float, float]]:
@@ -135,11 +182,26 @@ def evaluar_antropometria(
     errores = []
     advertencias = []
 
-    # Validaciones WHO Anthro
-    if peso_kg is not None and not (0.9 <= peso_kg <= 58.0):
-        errores.append(f"Peso {peso_kg} kg fuera de rango válido (0.9-58.0)")
-    if talla_cm is not None and not (38.0 <= talla_cm <= 150.0):
-        errores.append(f"Talla {talla_cm} cm fuera de rango válido (38-150)")
+    # Edad en días y meses (se calcula antes de validar, pues los rangos dependen de la edad)
+    edad_dias = calcular_edad(fecha_nacimiento, fecha_visita)
+    if edad_dias is None:
+        return _resultado_con_errores(["Fecha de nacimiento o de visita inválidas."])
+    edad_meses = edad_dias / 30.4375
+
+    # Referencia 2007 (AnthroPlus/OMS) para >5 años (>=60 meses); estándares para 0-5 años.
+    es_2007 = edad_meses >= 60.0
+
+    # Validaciones según grupo de edad
+    if es_2007:
+        if peso_kg is not None and not (6.0 <= peso_kg <= 150.0):
+            errores.append(f"Peso {peso_kg} kg fuera de rango válido (6.0-150.0)")
+        if talla_cm is not None and not (90.0 <= talla_cm <= 220.0):
+            errores.append(f"Talla {talla_cm} cm fuera de rango válido (90-220)")
+    else:
+        if peso_kg is not None and not (0.9 <= peso_kg <= 58.0):
+            errores.append(f"Peso {peso_kg} kg fuera de rango válido (0.9-58.0)")
+        if talla_cm is not None and not (38.0 <= talla_cm <= 150.0):
+            errores.append(f"Talla {talla_cm} cm fuera de rango válido (38-150)")
     if pc_cm is not None and not (25.0 <= pc_cm <= 64.0):
         errores.append(f"PC {pc_cm} cm fuera de rango válido (25-64)")
     if muac_mm is not None and not (60.0 <= muac_mm <= 350.0):
@@ -152,30 +214,61 @@ def evaluar_antropometria(
     if errores:
         return _resultado_con_errores(errores)
 
-    edad_dias = calcular_edad(fecha_nacimiento, fecha_visita)
-    edad_meses = edad_dias / 30.4375
+    # Calcular z-scores según el grupo de edad.
+    if es_2007:
+        # WHO Growth Reference 2007 (AnthroPlus): HAZ, WAZ (solo <=10 años) y BAZ.
+        es_femenino = sexo in ("F", "female")
+        haz_tabla = HAZ_GIRLS if es_femenino else HAZ_BOYS
+        waz_tabla = WAZ_GIRLS if es_femenino else WAZ_BOYS
+        baz_tabla = BAZ_GIRLS if es_femenino else BAZ_BOYS
 
-    # Parámetros para anthro
-    params: Dict[str, Any] = {
-        "sex": "male" if sexo in ("M", "male") else "female",
-        "age_days": edad_dias,
-        "measure": tipo_medicion,
-        "oedema": edema,
-    }
+        z_lhfa = calcular_z_2007(haz_tabla, edad_meses, talla_cm)
+        z_wfa = None
+        if peso_kg is not None and not edema and edad_meses <= 120.0:
+            z_wfa = calcular_z_2007(waz_tabla, edad_meses, peso_kg)
+        z_wflh = None
+        z_bmi = None
+        if peso_kg is not None and talla_cm is not None and talla_cm > 0:
+            imc_calc = peso_kg / ((talla_cm / 100.0) ** 2)
+            z_bmi = calcular_z_2007(baz_tabla, edad_meses, imc_calc)
+        z_acfa = None
 
-    if peso_kg is not None and not edema:
-        params["weight_kg"] = peso_kg
-    elif edema:
-        advertencias.append("Edema presente: el peso no se usa para z-scores de peso")
-
-    if talla_cm is not None:
-        params["height_cm"] = talla_cm
-
-    if muac_mm is not None:
-        params["muac_mm"] = muac_mm
-
-    # Calcular con anthro si está disponible; si no, usar aproximación local.
-    if _anthro_compute is not None:
+        resultado_anthro = {
+            "z_lhfa": z_lhfa,
+            "z_wfa": z_wfa,
+            "z_wflh": z_wflh,
+            "z_bmi": z_bmi,
+            "z_acfa": z_acfa,
+            "lhfa": clasificar_z(z_lhfa) if z_lhfa is not None else None,
+            "wfa": clasificar_z(z_wfa) if z_wfa is not None else None,
+            "wflh": None,
+            "bmi": clasificar_z(z_bmi) if z_bmi is not None else None,
+            "acfa": "N/A",
+            "flag_lhfa": 0,
+            "flag_wfa": 0,
+            "flag_wflh": 0,
+            "flag_bmi": 0,
+            "flag_acfa": 0,
+            "bmi_val": round(peso_kg / ((talla_cm / 100.0) ** 2), 1) if peso_kg is not None and talla_cm and talla_cm > 0 else None,
+            "height_cm_adj": talla_cm,
+            "measure_correction": None,
+            "warnings": ["WHO Growth Reference 2007 (AnthroPlus) aplicada para mayores de 5 años."],
+        }
+    elif _anthro_compute is not None:
+        params: Dict[str, Any] = {
+            "sex": "male" if sexo in ("M", "male") else "female",
+            "age_days": edad_dias,
+            "measure": tipo_medicion,
+            "oedema": edema,
+        }
+        if peso_kg is not None and not edema:
+            params["weight_kg"] = peso_kg
+        elif edema:
+            advertencias.append("Edema presente: el peso no se usa para z-scores de peso")
+        if talla_cm is not None:
+            params["height_cm"] = talla_cm
+        if muac_mm is not None:
+            params["muac_mm"] = muac_mm
         try:
             resultado_anthro = _anthro_compute(params)
         except Exception as e:
@@ -195,10 +288,10 @@ def evaluar_antropometria(
             "z_wflh": calcular_z_score_peso_talla(peso_kg, talla_cm, sexo) if peso_kg is not None and talla_cm is not None else None,
             "z_bmi": calcular_z_score_imc_edad(calcular_imc(peso_kg, talla_cm), edad_meses) if peso_kg is not None and talla_cm is not None else None,
             "z_acfa": None,
-            "lhfa": clasificar_z(resultado_anthro.get("z_lhfa")) if False else None,
-            "wfa": clasificar_z(resultado_anthro.get("z_wfa")) if False else None,
-            "wflh": clasificar_z(resultado_anthro.get("z_wflh")) if False else None,
-            "bmi": clasificar_z(resultado_anthro.get("z_bmi")) if False else None,
+            "lhfa": None,
+            "wfa": None,
+            "wflh": None,
+            "bmi": None,
             "acfa": "N/A",
             "flag_lhfa": 0,
             "flag_wfa": 0,
@@ -210,6 +303,7 @@ def evaluar_antropometria(
             "measure_correction": None,
             "warnings": ["anthro no disponible: se empleó cálculo aproximado local."],
         }
+
 
     # Extraer resultados
     z_lhfa = resultado_anthro.get("z_lhfa")
@@ -238,10 +332,10 @@ def evaluar_antropometria(
         talla_m = talla_cm / 100.0
         bmi_val = round(peso_kg / (talla_m ** 2), 1)
 
-    # Perímetro cefálico para edad
+    # Perímetro cefálico para edad (solo aplica en estándares 0-5 años)
     z_pc = None
     clasif_pc = "N/A"
-    if pc_cm is not None:
+    if pc_cm is not None and not es_2007:
         z_pc = calcular_z_pc(sexo, edad_dias, pc_cm)
         if z_pc is not None:
             clasif_pc = clasificar_z(z_pc)

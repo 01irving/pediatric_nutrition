@@ -28,6 +28,31 @@ def test_pc_edad_z_anthro():
     assert r['z_pc'] == -0.75
 
 
+def test_anthroplus_5_19_anos():
+    """Verifica la ruta WHO Growth Reference 2007 (AnthroPlus) contra valores oficiales.
+    Caso del README anthroplus: niño de ~100 meses, 100 cm, 30 kg -> zhfa -5.04, zwfa 0.87."""
+    from src.modules.who_anthro_calc import evaluar_antropometria
+    r = evaluar_antropometria(
+        sexo='M', fecha_nacimiento=date(2015, 1, 1), fecha_visita=date(2023, 4, 25),
+        peso_kg=30.0, talla_cm=100.0,
+    )
+    assert r['edad_meses_decimal'] >= 99
+    assert r['clasif_lhfa'] == 'Desnutrición severa'
+    assert r['z_lhfa'] is not None and r['z_lhfa'] <= -5.0
+    assert r['z_wfa'] is not None and abs(r['z_wfa'] - 0.87) < 0.15
+    assert '2007' in ' '.join(r['advertencias'])
+
+    # WAZ no está definido por encima de 10 años (120 meses)
+    r2 = evaluar_antropometria(
+        sexo='F', fecha_nacimiento=date(2008, 1, 1), fecha_visita=date(2024, 1, 1),
+        peso_kg=50.0, talla_cm=160.0,
+    )
+    assert r2['edad_meses_decimal'] > 120
+    assert r2['z_wfa'] is None
+    assert r2['z_lhfa'] is not None
+    assert r2['z_bmi'] is not None
+
+
 def test_edad_meses():
     nac = date(2024, 1, 1)
     eval_ = date(2025, 1, 1)
