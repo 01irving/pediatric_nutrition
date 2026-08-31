@@ -834,6 +834,8 @@ class MainWindow:
         self.ant_fecha_visita = ttk.Entry(r2, width=12)
         self.ant_fecha_visita.pack(side=tk.LEFT, padx=5)
         self.ant_fecha_visita.insert(0, date.today().strftime("%d-%m-%Y"))
+        self.ant_fecha_visita.bind("<KeyRelease>", self._ant_actualizar_tipo_med)
+        self.ant_fecha_visita.bind("<FocusOut>", self._ant_actualizar_tipo_med)
 
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5, padx=5)
 
@@ -1242,6 +1244,32 @@ class MainWindow:
         self.lab_resultado_lbl.config(text="Sin evaluar.")
         self.status_var.set("Edición de laboratorio cancelada.")
 
+    def _ant_actualizar_tipo_med(self, event=None):
+        """Bloquea el selector decúbito/bipedestación para >5 años (la talla se
+        toma tal cual en la Referencia 2007 / AnthroPlus)."""
+        from datetime import date as date_cls
+        try:
+            pid = int(self.ant_paciente_id.get().strip())
+        except (ValueError, TypeError):
+            self.ant_tipo_med.config(state="readonly")
+            return
+        paciente = self.patient_mgr.obtener_paciente(pid)
+        if not paciente:
+            self.ant_tipo_med.config(state="readonly")
+            return
+        try:
+            fecha_nac = date_cls.fromisoformat(paciente['fecha_nacimiento'])
+            fecha_visita = _parsear_fecha(self.ant_fecha_visita.get().strip())
+        except (ValueError, TypeError):
+            self.ant_tipo_med.config(state="readonly")
+            return
+        edad_meses = (fecha_visita - fecha_nac).days / 30.4375
+        if edad_meses >= 60.0:
+            self.ant_tipo_med.set("Bipedestación (H)")
+            self.ant_tipo_med.config(state="disabled")
+        else:
+            self.ant_tipo_med.config(state="readonly")
+
     def _ant_cargar_paciente(self):
         pid = self.patient_mgr.resolver_id_a_database_id(self.ant_paciente_id.get())
         if pid is None:
@@ -1288,6 +1316,7 @@ class MainWindow:
             self.ant_talla.insert(0, str(paciente['talla_cm']))
 
         self.status_var.set(f"Paciente {paciente['nombre']} cargado en Antropometría")
+        self._ant_actualizar_tipo_med()
 
     def _ant_leer_campos(self):
         peso = None
@@ -1337,6 +1366,8 @@ class MainWindow:
         except ValueError:
             messagebox.showerror("Error", "Fecha de visita inválida (DD-MM-AAAA).")
             return
+
+        self._ant_actualizar_tipo_med()
 
         try:
             peso, talla, tipo_med, edema, pc, muac, pliegue, pliegue_sub = self._ant_leer_campos()
@@ -1513,6 +1544,7 @@ class MainWindow:
             tipo = ev.get("tipo_medicion") or "L"
             self.ant_tipo_med.set("Decúbito (L)" if tipo == "L" else "Bipedestación (H)")
             self.ant_edema.set("si" if ev.get("edema") else "no")
+            self._ant_actualizar_tipo_med()
 
             ventana.destroy()
             messagebox.showinfo("Cargado",
@@ -1741,6 +1773,19 @@ class MainWindow:
             messagebox.showerror("Error", "Fechas inválidas.")
             return
 
+        edad_meses = (fecha_visita - fecha_nac).days / 30.4375
+        # Indicadores sin gráfica de referencia para mayores de 5 años (OMS 2007).
+        invalidos_2007 = {"wflh", "hcfa", "acfa", "tsfa", "ssfa"}
+        if edad_meses >= 60 and indicador in invalidos_2007:
+            messagebox.showwarning(
+                "Gráfica no disponible para mayores de 5 años",
+                f"'{self.INDICADOR_NOMBRES.get(indicador, indicador)}' no tiene gráfica "
+                "de referencia para pacientes mayores de 5 años.\n\n"
+                "La Referencia 2007 (AnthroPlus) solo cubre: Longitud/Altura-Edad, "
+                "IMC-Edad y Peso-Edad (este último solo hasta los 10 años)."
+            )
+            return
+
         resultado = evaluar_antropometria(
             sexo=paciente['sexo'],
             fecha_nacimiento=fecha_nac,
@@ -1783,14 +1828,22 @@ class MainWindow:
             info += f" | MUAC: {muac/10:.1f} cm"
         ttk.Label(info_frame, text=info, font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
 
+        # Para mayores de 5 años (Referencia 2007 / AnthroPlus) solo existe la
+        # curva de Z-Score (SD); no hay percentiles P3-P97 como en 0-5 años.
+        es_mayor_5 = resultado['edad_meses_completos'] >= 60
         mode_var = tk.StringVar(value="zscore")
         mode_frame = ttk.Frame(ventana)
         mode_frame.pack(fill=tk.X, padx=10, pady=2)
         ttk.Label(mode_frame, text="Modo:").pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(mode_frame, text="Z-Scores (SD)", variable=mode_var, value="zscore",
-                       bg=COLOR_BG, font=('Segoe UI', 10)).pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(mode_frame, text="Percentiles (P3-P97)", variable=mode_var, value="percentil",
-                       bg=COLOR_BG, font=('Segoe UI', 10)).pack(side=tk.LEFT, padx=5)
+        rb_zscore = tk.Radiobutton(mode_frame, text="Z-Scores (SD)", variable=mode_var,
+                                   value="zscore", bg=COLOR_BG, font=('Segoe UI', 10))
+        rb_zscore.pack(side=tk.LEFT, padx=5)
+        rb_percentil = tk.Radiobutton(mode_frame, text="Percentiles (P3-P97)",
+                                      variable=mode_var, value="percentil",
+                                      bg=COLOR_BG, font=('Segoe UI', 10))
+        rb_percentil.pack(side=tk.LEFT, padx=5)
+        if es_mayor_5:
+            rb_percentil.config(state=tk.DISABLED)
 
         chart_frame = ttk.Frame(ventana)
         chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -1871,6 +1924,7 @@ class MainWindow:
             w.config(state='readonly')
         self.ant_edema.set("no")
         self.ant_tipo_med.set("Decúbito (L)")
+        self.ant_tipo_med.config(state="readonly")
         self.ant_fecha_visita.delete(0, tk.END)
         self.ant_fecha_visita.insert(0, date.today().strftime("%d-%m-%Y"))
         self._resultado_actual = None

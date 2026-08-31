@@ -56,6 +56,11 @@ def _build_table_from_tuples(sex_data: list) -> dict:
     return {row[0]: {"l": row[1], "m": row[2], "s": row[3]} for row in sex_data}
 
 
+def _build_table_2007(sex_data: dict) -> dict:
+    """Convierte dict de la referencia 2007 (meses -> (L, M, S)) a formato {mes: {l,m,s}}."""
+    return {mes: {"l": row[0], "m": row[1], "s": row[2]} for mes, row in sex_data.items()}
+
+
 def _get_lms(table: dict, sex: str, key: int) -> Optional[Tuple[float, float, float]]:
     sex_key = "M" if sex in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -141,6 +146,7 @@ def _dibujar_grafica(
     modo: str = "zscore",
     x_formatter=None,
     percentil_paciente: float = None,
+    x_step: Optional[int] = None,
 ) -> tk.Canvas:
     """
     Función genérica para dibujar gráfica OMS en Canvas.
@@ -287,7 +293,7 @@ def _dibujar_grafica(
     canvas.create_line(ml, H - mb, W - mr, H - mb, fill='#333', width=1.5)
     canvas.create_line(ml, mt, ml, H - mb, fill='#333', width=1.5)
 
-    step = max(1, int((x_max - x_min) / 10))
+    step = max(1, int((x_max - x_min) / 10)) if x_step is None else x_step
     v = int(x_min // step * step)
     while v <= x_max:
         x = to_x(v)
@@ -347,8 +353,31 @@ def _z_to_percentil(z):
 
 def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zscore",
                          edad_dias=None, tipo_medicion="L"):
-    table = _load_table("day_lhfa.json")
+    from src.modules.who2007_data import HAZ_BOYS, HAZ_GIRLS
+    from src.modules.who_anthro_calc import calcular_z_2007
     sex_key = "M" if sexo in ("M", "male") else "F"
+
+    if (edad_meses or 0) >= 60:
+        tabla_2007 = HAZ_BOYS if sex_key == "M" else HAZ_GIRLS
+        table = {
+            "M": _build_table_2007(HAZ_BOYS),
+            "F": _build_table_2007(HAZ_GIRLS),
+        }
+        meses = sorted(table.get(sex_key, {}).keys())
+        if not meses:
+            c = tk.Canvas(parent, width=600, height=400, bg='white')
+            c.create_text(300, 200, text="No hay datos disponibles", font=('Segoe UI', 12))
+            return c
+        curvas = _generar_curvas(table, sexo, meses)
+        z = calcular_z_2007(tabla_2007, edad_meses, talla_cm)
+        z = z if z is not None else 0
+        return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, talla_cm,
+                                z, nombre, "Altura para Edad (OMS 2007 / AnthroPlus)",
+                                "Edad (años)", "Longitud / Altura (cm)", modo,
+                                percentil_paciente=_z_to_percentil(z),
+                                x_formatter=lambda v: f"{int(round(v / 12))}a",
+                                x_step=12)
+    table = _load_table("day_lhfa.json")
     tbl = table.get(sex_key, {})
     dias = sorted(tbl.keys())
     if not dias:
@@ -374,6 +403,38 @@ def generar_grafica_lhfa(parent, sexo, edad_meses, talla_cm, nombre="", modo="zs
 
 def generar_grafica_wfa(parent, sexo, edad_meses, peso_kg, nombre="", modo="zscore",
                         edad_dias=None):
+    from src.modules.who2007_data import WAZ_BOYS, WAZ_GIRLS
+    from src.modules.who_anthro_calc import calcular_z_2007
+    sex_key = "M" if sexo in ("M", "male") else "F"
+
+    if (edad_meses or 0) > 120:
+        c = tk.Canvas(parent, width=600, height=400, bg='white')
+        c.create_text(300, 200,
+                      text="Peso-edad sin referencia OMS para mayores de 10 años\n"
+                           "(La OMS 2007 define peso/edad solo hasta los 10 años)\n\n"
+                           "Use IMC-edad (BMIAZ) o Altura-edad (HAZ).",
+                      font=('Segoe UI', 11), justify=tk.CENTER)
+        return c
+    if (edad_meses or 0) >= 60:
+        tabla_2007 = WAZ_BOYS if sex_key == "M" else WAZ_GIRLS
+        table = {
+            "M": _build_table_2007(WAZ_BOYS),
+            "F": _build_table_2007(WAZ_GIRLS),
+        }
+        meses = sorted(table.get(sex_key, {}).keys())
+        if not meses:
+            c = tk.Canvas(parent, width=600, height=400, bg='white')
+            c.create_text(300, 200, text="No hay datos disponibles", font=('Segoe UI', 12))
+            return c
+        curvas = _generar_curvas(table, sexo, meses)
+        z = calcular_z_2007(tabla_2007, edad_meses, peso_kg)
+        z = z if z is not None else 0
+        return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, peso_kg,
+                                z, nombre, "Peso para Edad (OMS 2007 / AnthroPlus)",
+                                "Edad (años)", "Peso (kg)", modo,
+                                percentil_paciente=_z_to_percentil(z),
+                                x_formatter=lambda v: f"{int(round(v / 12))}a",
+                                x_step=12)
     table = _load_table("day_wfa.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
@@ -427,6 +488,30 @@ def generar_grafica_wflh(parent, sexo, talla_cm, peso_kg, nombre="", modo="zscor
 
 def generar_grafica_bmi(parent, sexo, edad_meses, bmi_val, nombre="", modo="zscore",
                         edad_dias=None):
+    from src.modules.who2007_data import BAZ_BOYS, BAZ_GIRLS
+    from src.modules.who_anthro_calc import calcular_z_2007
+    sex_key = "M" if sexo in ("M", "male") else "F"
+
+    if (edad_meses or 0) >= 60:
+        tabla_2007 = BAZ_BOYS if sex_key == "M" else BAZ_GIRLS
+        table = {
+            "M": _build_table_2007(BAZ_BOYS),
+            "F": _build_table_2007(BAZ_GIRLS),
+        }
+        meses = sorted(table.get(sex_key, {}).keys())
+        if not meses:
+            c = tk.Canvas(parent, width=600, height=400, bg='white')
+            c.create_text(300, 200, text="No hay datos disponibles", font=('Segoe UI', 12))
+            return c
+        curvas = _generar_curvas(table, sexo, meses)
+        z = calcular_z_2007(tabla_2007, edad_meses, bmi_val)
+        z = z if z is not None else 0
+        return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, bmi_val,
+                                z, nombre, "IMC para Edad (OMS 2007 / AnthroPlus)",
+                                "Edad (años)", "IMC (kg/m²)", modo,
+                                percentil_paciente=_z_to_percentil(z),
+                                x_formatter=lambda v: f"{int(round(v / 12))}a",
+                                x_step=12)
     table = _load_table("day_bmi.json")
     sex_key = "M" if sexo in ("M", "male") else "F"
     tbl = table.get(sex_key, {})
