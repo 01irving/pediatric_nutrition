@@ -501,26 +501,64 @@ def generar_grafica_acfa(parent, sexo, edad_meses, muac_mm, nombre="", modo="zsc
         z = _compute(params).get('z_acfa', 0)
     except Exception:
         z = 0
-    return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, muac_mm,
+    muac_cm = muac_mm / 10.0
+    # La tabla OMS de MUAC (day_acfa.json) está en cm; el eje se muestra en cm.
+    return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, muac_cm,
                             z, nombre, "MUAC para Edad",
-                            "Edad (meses)", "MUAC (mm)", modo,
+                            "Edad (meses)", "MUAC (cm)", modo,
                             percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_tsfa(parent, sexo, edad_meses, triceps_mm, nombre="", modo="zscore"):
-    c = tk.Canvas(parent, width=600, height=400, bg='white')
-    c.create_text(300, 180, text="Pliegue Tríceps para Edad", font=('Segoe UI', 14, 'bold'), fill='#1a5276')
-    c.create_text(300, 210, text="No hay tablas LMS oficiales OMS", font=('Segoe UI', 10), fill='#888')
-    c.create_text(300, 235, text=f"Valor medido: {triceps_mm:.1f} mm", font=('Segoe UI', 11, 'bold'))
-    return c
+def generar_grafica_tsfa(parent, sexo, edad_meses, triceps_mm, nombre="", modo="zscore",
+                         edad_dias=None):
+    from src.modules.who_anthro_calc import (
+        TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY, calcular_z_pliegue,
+    )
+    table = {
+        "M": _build_table_from_tuples(TSFA_BOYS_DAILY),
+        "F": _build_table_from_tuples(TSFA_GIRLS_DAILY),
+    }
+    sex_key = "M" if sexo in ("M", "male") else "F"
+    tbl = table.get(sex_key, {})
+    dias = [d for d in sorted(tbl.keys()) if 91 <= d <= 1826]
+    if not dias:
+        c = tk.Canvas(parent, width=600, height=400, bg='white')
+        c.create_text(300, 200, text="No hay datos disponibles", font=('Segoe UI', 12))
+        return c
+    meses = [d / DAYS_PER_MONTH for d in dias]
+    curvas = _generar_curvas(table, sexo, dias)
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
+    z = calcular_z_pliegue(sexo, age_d, triceps_mm, TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY) or 0
+    return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, triceps_mm,
+                            z, nombre, "Tríceps para Edad (OMS MCGS 2006)",
+                            "Edad (meses)", "Pliegue tríceps (mm)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
-def generar_grafica_ssfa(parent, sexo, edad_meses, subesc_mm, nombre="", modo="zscore"):
-    c = tk.Canvas(parent, width=600, height=400, bg='white')
-    c.create_text(300, 180, text="Pliegue Subescapular para Edad", font=('Segoe UI', 14, 'bold'), fill='#1a5276')
-    c.create_text(300, 210, text="No hay tablas LMS oficiales OMS", font=('Segoe UI', 10), fill='#888')
-    c.create_text(300, 235, text=f"Valor medido: {subesc_mm:.1f} mm", font=('Segoe UI', 11, 'bold'))
-    return c
+def generar_grafica_ssfa(parent, sexo, edad_meses, subesc_mm, nombre="", modo="zscore",
+                         edad_dias=None):
+    from src.modules.who_anthro_calc import (
+        SSFA_BOYS_DAILY, SSFA_GIRLS_DAILY, calcular_z_pliegue,
+    )
+    table = {
+        "M": _build_table_from_tuples(SSFA_BOYS_DAILY),
+        "F": _build_table_from_tuples(SSFA_GIRLS_DAILY),
+    }
+    sex_key = "M" if sexo in ("M", "male") else "F"
+    tbl = table.get(sex_key, {})
+    dias = [d for d in sorted(tbl.keys()) if 91 <= d <= 1826]
+    if not dias:
+        c = tk.Canvas(parent, width=600, height=400, bg='white')
+        c.create_text(300, 200, text="No hay datos disponibles", font=('Segoe UI', 12))
+        return c
+    meses = [d / DAYS_PER_MONTH for d in dias]
+    curvas = _generar_curvas(table, sexo, dias)
+    age_d = int(edad_dias) if edad_dias is not None else int(edad_meses * DAYS_PER_MONTH)
+    z = calcular_z_pliegue(sexo, age_d, subesc_mm, SSFA_BOYS_DAILY, SSFA_GIRLS_DAILY) or 0
+    return _dibujar_grafica(parent, sexo, meses, curvas, edad_meses, subesc_mm,
+                            z, nombre, "Subescapular para Edad (OMS MCGS 2006)",
+                            "Edad (meses)", "Pliegue subescapular (mm)", modo,
+                            percentil_paciente=_z_to_percentil(z))
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────────────

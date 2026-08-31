@@ -53,6 +53,37 @@ def test_anthroplus_5_19_anos():
     assert r2['z_bmi'] is not None
 
 
+def test_pliegues_tsfa_ssfa():
+    """Verifica pliegues tríceps/subescapular (OMS MCGS 2006, 3 meses-5 años)."""
+    from src.modules.who_anthro_calc import (
+        evaluar_antropometria, calcular_z_pliegue,
+        TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY,
+    )
+
+    # Valor igual a la mediana a 365 días → z ≈ 0
+    M = next(m for a, l, m, s in TSFA_BOYS_DAILY if a == 365)
+    z = calcular_z_pliegue('M', 365, M, TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY)
+    assert z is not None and abs(z) < 0.01
+
+    # Niño de 2 años con pliegues → z-score calculado y clasificación
+    r = evaluar_antropometria(
+        sexo='M', fecha_nacimiento=date(2022, 1, 1), fecha_visita=date(2024, 1, 1),
+        pliegue_triceps_mm=9.0, pliegue_subescapular_mm=6.0,
+    )
+    assert r['z_tsfa'] is not None
+    assert r['z_ssfa'] is not None
+    assert r['clasif_tsfa'] != 'N/A'
+    assert not r['errores']
+
+    # Mayor de 5 años → pliegue no tiene referencia OMS (AnthroPlus)
+    r2 = evaluar_antropometria(
+        sexo='M', fecha_nacimiento=date(2018, 1, 1), fecha_visita=date(2024, 1, 1),
+        pliegue_triceps_mm=9.0,
+    )
+    assert r2['z_tsfa'] is None
+    assert 'sin tabla OMS' in r2['clasif_tsfa']
+
+
 def test_edad_meses():
     nac = date(2024, 1, 1)
     eval_ = date(2025, 1, 1)

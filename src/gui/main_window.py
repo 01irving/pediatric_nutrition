@@ -868,7 +868,7 @@ class MainWindow:
 
         rm_muac = ttk.Frame(med_frame)
         rm_muac.pack(fill=tk.X, pady=2)
-        ttk.Label(rm_muac, text="MUAC (mm):").pack(side=tk.LEFT, padx=5)
+        ttk.Label(rm_muac, text="MUAC (cm):").pack(side=tk.LEFT, padx=5)
         self.ant_muac = ttk.Entry(rm_muac, width=10)
         self.ant_muac.pack(side=tk.LEFT, padx=5)
 
@@ -1303,7 +1303,7 @@ class MainWindow:
             pc = float(self.ant_pc.get().strip())
         muac = None
         if self.ant_muac.get().strip():
-            muac = float(self.ant_muac.get().strip())
+            muac = float(self.ant_muac.get().strip()) * 10  # cm -> mm
         pliegue = None
         if self.ant_pliegue.get().strip():
             pliegue = float(self.ant_pliegue.get().strip())
@@ -1506,7 +1506,7 @@ class MainWindow:
             _set(self.ant_peso, ev.get("peso_kg"))
             _set(self.ant_talla, ev.get("talla_cm"))
             _set(self.ant_pc, ev.get("pc_cm"))
-            _set(self.ant_muac, ev.get("muac_mm"))
+            _set(self.ant_muac, (ev.get("muac_mm") / 10) if ev.get("muac_mm") is not None else None)
             _set(self.ant_pliegue, ev.get("pliegue_triceps_mm"))
             _set(self.ant_pliegue_sub, ev.get("pliegue_subescapular_mm"))
 
@@ -1650,7 +1650,8 @@ class MainWindow:
         elif codigo == "hcfa":
             med_val = f"{r.get('pc_cm', '')} cm"
         elif codigo == "acfa":
-            med_val = f"{r.get('muac_mm', '')} mm"
+            v = r.get('muac_mm')
+            med_val = f"{v/10:.1f} cm" if v is not None else ""
         elif codigo == "tsfa":
             med_val = f"{r.get('pliegue_triceps_mm', '')} mm"
         elif codigo == "ssfa":
@@ -1779,7 +1780,7 @@ class MainWindow:
         if pc:
             info += f" | PC: {pc} cm"
         if muac:
-            info += f" | MUAC: {muac} mm"
+            info += f" | MUAC: {muac/10:.1f} cm"
         ttk.Label(info_frame, text=info, font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
 
         mode_var = tk.StringVar(value="zscore")
@@ -1829,11 +1830,11 @@ class MainWindow:
             elif indicador == "tsfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], pliegue,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d, **kwargs)
             elif indicador == "ssfa":
                 chart = chart_func(chart_frame, paciente['sexo'],
                                    resultado['edad_meses_decimal'], pliegue_sub,
-                                   paciente['nombre'], **kwargs)
+                                   paciente['nombre'], edad_dias=edad_d, **kwargs)
             chart.pack(fill=tk.BOTH, expand=True)
 
         mode_var.trace_add("write", refrescar_grafica)

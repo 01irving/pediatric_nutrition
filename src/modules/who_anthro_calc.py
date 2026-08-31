@@ -56,6 +56,9 @@ from .hcfa_data import HC_LMS_BOYS_DAILY as _PC_LMS_BOYS, HC_LMS_GIRLS_DAILY as 
 from .who2007_data import (
     HAZ_BOYS, HAZ_GIRLS, WAZ_BOYS, WAZ_GIRLS, BAZ_BOYS, BAZ_GIRLS,
 )
+from .tsfa_ssfa_data import (
+    TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY, SSFA_BOYS_DAILY, SSFA_GIRLS_DAILY,
+)
 
 
 # ── WHO Growth Reference 2007 (5-19 años) ───────────────────────────────────
@@ -131,6 +134,31 @@ def calcular_z_pc(sexo: str, edad_dias: int, pc_cm: float) -> Optional[float]:
         z = math.log(pc_cm / M) / S
     else:
         z = ((pc_cm / M) ** L - 1) / (L * S)
+    return round(z, 2)
+
+
+def calcular_z_pliegue(sexo: str, edad_dias: int, valor_mm: float,
+                       tabla_m, tabla_f) -> Optional[float]:
+    """Calcula Z-score de pliegue (tríceps/subescapular) para la edad usando
+    las tablas LMS diarias oficiales OMS (91-1826 días = 3 meses a 5 años)."""
+    if valor_mm is None:
+        return None
+    if not (91 <= edad_dias <= 1826):
+        return None
+    table = tabla_m if sexo in ("M", "male") else tabla_f
+    lms = _interpolate_pc_lms(table, edad_dias)
+    if lms is None:
+        return None
+    L, M, S = lms
+    if not S or S == 0:
+        return None
+    try:
+        if abs(L) < 1e-10:
+            z = math.log(valor_mm / M) / S
+        else:
+            z = ((valor_mm / M) ** L - 1) / (L * S)
+    except (ZeroDivisionError, ValueError):
+        return None
     return round(z, 2)
 
 
@@ -340,6 +368,23 @@ def evaluar_antropometria(
         if z_pc is not None:
             clasif_pc = clasificar_z(z_pc)
 
+    # Pliegues tríceps y subescapular para edad (OMS MCGS 2006: 3 meses a 5 años).
+    # Aplican solo en estándares 0-5 años (91-1826 días); no existen en la
+    # referencia 2007 (AnthroPlus) para mayores de 5 años.
+    z_tsfa = None
+    z_ssfa = None
+    if not es_2007 and 91 <= edad_dias <= 1826:
+        if pliegue_triceps_mm is not None:
+            z_tsfa = calcular_z_pliegue(sexo, edad_dias, pliegue_triceps_mm,
+                                        TSFA_BOYS_DAILY, TSFA_GIRLS_DAILY)
+        if pliegue_subescapular_mm is not None:
+            z_ssfa = calcular_z_pliegue(sexo, edad_dias, pliegue_subescapular_mm,
+                                        SSFA_BOYS_DAILY, SSFA_GIRLS_DAILY)
+    clasif_tsfa = clasificar_z(z_tsfa) if z_tsfa is not None else (
+        "Medición registrada (sin tabla OMS para esta edad)" if pliegue_triceps_mm else "N/A")
+    clasif_ssfa = clasificar_z(z_ssfa) if z_ssfa is not None else (
+        "Medición registrada (sin tabla OMS para esta edad)" if pliegue_subescapular_mm else "N/A")
+
     # Percentiles
     perc_lhfa = round(z_to_percentile(z_lhfa), 1) if z_lhfa is not None else None
     perc_wfa = round(z_to_percentile(z_wfa), 1) if z_wfa is not None else None
@@ -347,6 +392,8 @@ def evaluar_antropometria(
     perc_bmi = round(z_to_percentile(z_bmi), 1) if z_bmi is not None else None
     perc_acfa = round(z_to_percentile(z_acfa), 1) if z_acfa is not None else None
     perc_pc = round(z_to_percentile(z_pc), 1) if z_pc is not None else None
+    perc_tsfa = round(z_to_percentile(z_tsfa), 1) if z_tsfa is not None else None
+    perc_ssfa = round(z_to_percentile(z_ssfa), 1) if z_ssfa is not None else None
 
     # Clasificación Wellcome (solo si hay edema)
     clasificacion_wellcome = None
@@ -394,12 +441,12 @@ def evaluar_antropometria(
         "perc_bmi": perc_bmi,
         "perc_acfa": perc_acfa,
         "perc_pc": perc_pc,
-        "z_tsfa": None,
-        "z_ssfa": None,
-        "perc_tsfa": None,
-        "perc_ssfa": None,
-        "clasif_tsfa": "Medición registrada (sin tabla OMS)" if pliegue_triceps_mm else "N/A",
-        "clasif_ssfa": "Medición registrada (sin tabla OMS)" if pliegue_subescapular_mm else "N/A",
+        "z_tsfa": round(z_tsfa, 2) if z_tsfa is not None else None,
+        "z_ssfa": round(z_ssfa, 2) if z_ssfa is not None else None,
+        "perc_tsfa": perc_tsfa,
+        "perc_ssfa": perc_ssfa,
+        "clasif_tsfa": clasif_tsfa,
+        "clasif_ssfa": clasif_ssfa,
         "pliegue_triceps_mm": pliegue_triceps_mm,
         "pliegue_subescapular_mm": pliegue_subescapular_mm,
         "errores": errores,
@@ -465,6 +512,15 @@ def formatear_resultado(r: Dict[str, Any]) -> str:
 
     if r['z_acfa'] is not None:
         indicadores.append(("MUAC-edad", r['z_acfa'], r['clasif_muac'], r['flag_acfa']))
+
+    if r['z_tsfa'] is not None:
+        indicadores.append(("Tríceps-edad", r['z_tsfa'], r['clasif_tsfa'], 0))
+    elif r['clasif_tsfa'] and r['clasif_tsfa'] != "N/A":
+        lineas.append(f"  {'Tríceps-edad':.<30s} {'N/A':>8s}  |  {r['clasif_tsfa']}")
+    if r['z_ssfa'] is not None:
+        indicadores.append(("Subescapular-edad", r['z_ssfa'], r['clasif_ssfa'], 0))
+    elif r['clasif_ssfa'] and r['clasif_ssfa'] != "N/A":
+        lineas.append(f"  {'Subescapular-edad':.<30s} {'N/A':>8s}  |  {r['clasif_ssfa']}")
 
     for nombre, z, clasif, flag in indicadores:
         z_txt = f"{z:+.2f}" if z is not None else "N/A"
